@@ -1,0 +1,19 @@
+{
+  "name": "luoi-va-lo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Chiến lược năng lượng kết hợp mô phỏng vật lý, dựng trên PlayCanvas.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playcanvas": "2.24.1"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

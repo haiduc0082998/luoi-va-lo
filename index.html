@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lưới &amp; Lò</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Be+Vietnam+Pro:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<header class="top">
+  <h1>Lưới &amp; Lò<small>Chiến lược năng lượng · bản thử 3D</small></h1>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-grid" aria-selected="true">Lưới điện</button>
+    <button class="tab" role="tab" id="tab-reactor" aria-selected="false">Lò phản ứng</button>
+    <button class="tab" role="tab" id="tab-overview" aria-selected="false">Toàn cảnh</button>
+  </div>
+  <div class="stat">
+    <div>Thời gian<b id="clock">Ngày 1, 08:00</b></div>
+    <div>Tốc độ<div class="seg" id="speed"></div></div>
+    <div>Ngân sách<b id="budget">120 tr USD</b></div>
+    <div>Lòng dân <span id="apV"></span><div class="meter"><i id="apBar"></i></div></div>
+  </div>
+</header>
+<div class="ticker"><div class="track" id="track"></div></div>
+
+<div class="band">
+  <div class="stage" id="stage">
+    <canvas id="scene" aria-label="Cảnh 3D lưới điện và nhà máy"></canvas>
+    <p class="hint">Kéo để xoay · cuộn hoặc chụm hai ngón để thu phóng</p>
+    <p class="nogl" id="noGL" hidden>Trình duyệt này không chạy được WebGL nên không hiển thị cảnh 3D. Bảng điều khiển bên dưới vẫn hoạt động.</p>
+  </div>
+
+  <div class="deck">
+    <section class="panel" id="panel-grid">
+      <h2>Lưới truyền tải</h2>
+      <div class="cols">
+        <div>
+          <div class="row"><span class="lab">Điện áp truyền tải</span><div class="seg" id="kv"></div></div>
+          <div class="row"><span class="lab">Tiết diện dây nhôm (mm²)</span><div class="seg" id="sec"></div></div>
+          <div class="row"><label for="L">Chiều dài <output id="LV"></output></label><input type="range" id="L" min="5" max="300" step="5"></div>
+          <div class="row"><label for="P">Nhu cầu thành phố <output id="PV"></output></label><input type="range" id="P" min="20" max="700" step="10"></div>
+          <div class="row"><label for="Ta">Nhiệt độ môi trường <output id="TaV"></output></label><input type="range" id="Ta" min="10" max="45"></div>
+          <div class="row"><span class="lab">Rơ-le bảo vệ quá dòng</span><button class="btn" id="relay" type="button">Bật</button></div>
+          <div class="row"><label for="Imax">Ngưỡng cắt <output id="ImaxV"></output></label><input type="range" id="Imax" min="300" max="5000" step="50"></div>
+          <div class="btns"><button class="btn" id="restore" type="button">Khôi phục / đóng điện</button></div>
+          <p class="lab sp">Kịch bản</p><div class="btns" id="cPresets"></div>
+        </div>
+        <div>
+          <div class="lamps" id="cLamps"></div>
+          <dl>
+            <div><dt>Điện trở dây R = ρ·L/A<small id="rRf"></small></dt><dd id="rR"></dd></div>
+            <div><dt>Dòng điện I<small>giải P = (U − I·R)·I</small></dt><dd id="rI"></dd></div>
+            <div><dt>Tổn hao nhiệt P = I²·R<small id="rLf"></small></dt><dd id="rL"></dd></div>
+            <div><dt>Điện áp tới thành phố U − I·R<small id="rUf"></small></dt><dd id="rU"></dd></div>
+            <div><dt>Nhiệt độ dây dẫn<small>võng ở 80 °C, cháy ở 250 °C</small></dt><dd id="rTw"></dd><div class="bar"><i id="bTw"></i><b style="left:26.7%"></b><b style="left:83.3%"></b></div></div>
+            <div><dt>Nhiệt độ dầu máy biến áp<small>định mức 400 MVA, cháy ở 150 °C</small></dt><dd id="rTt"></dd><div class="bar"><i id="bTt"></i><b style="left:93.7%"></b></div></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-reactor" hidden>
+      <h2>Lò phản ứng nước áp lực 3 000 MWt</h2>
+      <div class="cols">
+        <div>
+          <div class="row"><label for="rod">Thanh điều khiển rút ra <output id="rodV"></output></label><input type="range" id="rod" min="0" max="100" step="0.5"></div>
+          <div class="btns"><button class="btn scram" id="scram" type="button">SCRAM</button></div>
+          <div class="row sp"><span class="lab">Bơm làm mát sơ cấp</span><div class="btns" id="pumps"></div></div>
+          <div class="row"><span class="lab">Hệ thống</span><div class="btns" id="sys"></div></div>
+          <p class="lab">Kịch bản</p><div class="btns" id="rPresets"></div>
+          <div class="lamps sp" id="rLamps"></div>
+        </div>
+        <div>
+          <dl>
+            <div><dt>Công suất phân hạch<small id="rPf2"></small></dt><dd id="rPf"></dd></div>
+            <div><dt>Nhiệt phân rã<small>vẫn sinh nhiệt sau khi dập lò</small></dt><dd id="rDh"></dd></div>
+            <div><dt>Nhiệt nước mang đi Q = m·c·ΔT<small id="rQf"></small></dt><dd id="rQ"></dd></div>
+            <div><dt>Cân bằng nhiệt<small>Q sinh − Q tản</small></dt><dd id="rBal"></dd></div>
+            <div><dt>Độ phản ứng ρ<small>thanh điều khiển − hệ số nhiệt<span id="rVoid"></span></small></dt><dd id="rRho"></dd></div>
+            <div><dt>Điện phát lên lưới<small>hiệu suất chu trình hơi 33%</small></dt><dd id="rPe"></dd></div>
+            <div><dt>Nhiệt độ lõi<small>hư hại 1 100 °C · nóng chảy 2 800 °C</small></dt><dd id="rT"></dd><div class="bar"><i id="bT"></i><b style="left:39.3%"></b></div></div>
+            <div><dt>Áp suất sơ cấp<small>van xả 17 MPa · vỡ ống 22 MPa</small></dt><dd id="rP"></dd><div class="bar"><i id="bP"></i><b style="left:68%"></b><b style="left:88%"></b></div></div>
+            <div><dt>Hydro trong nhà lò<small>nổ khi đạt 100%</small></dt><dd id="rH"></dd><div class="bar"><i id="bH"></i></div></div>
+          </dl>
+          <svg class="map" viewBox="0 0 300 190" role="img" aria-label="Bản đồ hướng gió và đám mây phóng xạ">
+            <rect width="300" height="190" fill="var(--cool)" opacity=".25"/>
+            <path d="M70 0C95 40 60 80 90 120S80 170 100 190H300V0Z" fill="var(--ground)"/>
+            <ellipse id="plume" rx="10" ry="6" fill="var(--hot)" opacity="0"/>
+            <circle cx="120" cy="105" r="6" fill="var(--hot)"/><text x="130" y="100" font-size="13" fill="var(--ink)">Nhà máy</text>
+            <g font-size="13" fill="var(--ink)"><circle cx="210" cy="50" r="4"/><text x="218" y="54">Thủ phủ</text><circle cx="230" cy="150" r="4"/><text x="238" y="154">Bến Cảng</text><circle cx="160" cy="170" r="4"/><text x="168" y="174">Đồi Thông</text></g>
+            <g transform="translate(30 160)"><circle r="18" fill="var(--panel)"/><path id="windArrow" d="M0 12V-12M-6-5L0-12L6-5" stroke="var(--ink)" stroke-width="3" fill="none"/></g>
+          </svg>
+          <p class="note" id="windTxt"></p>
+        </div>
+      </div>
+    </section>
+  </div>
+  <p class="note">Bản thử nghiệm: mạch một pha, hệ số tản nhiệt và động học lò đã đơn giản hoá cho dễ chơi. Các con số gần đúng về bậc độ lớn, không dùng để thiết kế thật.</p>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
