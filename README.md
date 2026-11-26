@@ -13,43 +13,55 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1 + 2)
+## Có gì trong bản này (Giai đoạn 1–3)
 
-**Lưới điện**
-- Điện trở R = ρL/A, tăng theo nhiệt độ dây.
-- Dòng điện giải từ P = (U − I·R)·I. Nếu phương trình vô nghiệm thì xảy ra sụp đổ điện áp.
-- Tổn hao I²R và cân bằng nhiệt của dây: dây võng, đỏ rực, tới 250 °C thì chạm cây và cháy.
-- Rơ-le quá dòng, máy biến áp 400 MVA quá tải thì cháy dầu.
+**Bản đồ 3D**
+- Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
+- Bấm vào nhà máy, trạm, thành phố hoặc đường dây để xem thông số và điều khiển. Ngày và đêm chạy theo đồng hồ trong game.
+- **Xây trạm:** đặt trạm biến áp lên mặt đất (không xây trên sông hay sát công trình khác).
+- **Kéo dây:** chọn điểm đầu, điểm cuối. Chiều dài tính theo bản đồ, cột điện tự dựng theo địa hình, R = ρL/A tự tính.
 
-**Lò phản ứng nước áp lực 3 000 MWt**
-- Độ phản ứng gồm thanh điều khiển, hệ số nhiệt âm và hệ số rỗng dương (chế độ RBMK).
-- Nhiệt phân rã hai nhóm, nên lò vẫn nóng lên sau khi SCRAM.
-- Cân bằng nhiệt Q = m·c·ΔT, bơm có quán tính, máy phát diesel khởi động sau 15 giây.
-- Chuỗi sự cố: áp suất → van xả → vỡ ống (LOCA) → hydro → nổ → nóng chảy lõi → đám mây phóng xạ theo gió.
+**Lưới nhiều nút**
+- Tách đảo lưới theo máy cắt; mỗi đảo cân bằng phát – tải, thiếu nguồn thì sa thải phụ tải và tần số tụt dưới 50 Hz.
+- Phân bố công suất kiểu DC: dòng chia theo U²/R giữa các đường song song.
+- Mỗi tuyến: dòng I, tổn hao I²R, sụt áp, sụp đổ điện áp, nhiệt độ dây (võng, cháy ở 250 °C), rơ-le, máy cắt.
+- Mỗi trạm: nhiệt độ dầu máy biến áp, quá tải thì cháy.
+- Nhu cầu thay đổi theo giờ, đỉnh buổi tối, tăng khi nắng nóng.
+
+**Lò phản ứng 3 000 MWt**
+- Thanh điều khiển, nhiệt phân rã, Q = m·c·ΔT, áp suất, LOCA, hydro, nóng chảy lõi, đám mây phóng xạ theo gió.
+- Điện lưới ngoài của nhà máy lấy từ chính lưới: cắt hết đường dây là bơm phải chờ diesel.
+- **Bẫy AZ-3 (kiểu Chernobyl):** ở chế độ RBMK, thanh đi xuống chậm và đầu thanh bằng than chì làm độ phản ứng tăng trong vài giây đầu SCRAM. Lò ổn định thì SCRAM an toàn; lõi đã nóng khoảng 375–390 °C thì SCRAM lại làm công suất vọt lên, màn hình kẹt ở 99999 MW rồi nổ.
 
 **Quốc gia**
-- Ngân sách: bán điện giá 60 USD/MWh, chi phí sửa chữa.
-- Lòng dân: giảm khi mất điện, sụt áp hoặc có phóng xạ; dưới 25% sẽ có biểu tình.
-- Bản tin thế giới, ngày và đêm theo đồng hồ trong game.
+- Ngân sách: bán điện 60 USD/MWh, than 35 USD/MWh, chi phí xây dựng và sửa chữa.
+- Lạm phát (in tiền) làm tăng chỉ số giá.
+- Tham nhũng làm đắt công trình, dây mới có điện trở cao hơn thiết kế, ăn bớt doanh thu. Thanh tra để giảm.
+- Lòng dân, biểu tình, bản tin thế giới.
+- **Gacha kỹ sư:** kỹ sư rởm (hoảng loạn bấm SCRAM, tắt nhầm bơm), chuyên gia quốc tế (bám tải, giữ nhiệt), tiến sĩ hạt nhân (bật lại bơm, hiểu bẫy AZ-3). Tham nhũng cao thì dễ trúng kỹ sư rởm.
 
 ## Cấu trúc mã
 
 ```
 src/
-  physics/grid.js      mô hình lưới truyền tải (thuần JS, không phụ thuộc engine)
-  physics/reactor.js   mô hình lò phản ứng
-  game.js              thời gian, kinh tế, lòng dân, sự kiện → bản tin, kịch bản
-  world/scene.js       thế giới 3D PlayCanvas: cột điện, dây 3 pha, thành phố, nhà máy, lửa, khói
-  world/camera.js      camera quỹ đạo (chuột và cảm ứng)
-  ui/hud.js            bảng điều khiển, số liệu kèm công thức, đèn báo
-tests/physics.test.js  kiểm thử các kịch bản vật lý
+  physics/network.js   lưới nhiều nút: đảo, phân bố công suất, tần số, nhiệt dây và máy biến áp
+  physics/reactor.js   lò phản ứng, kể cả hiệu ứng SCRAM dương AZ-3
+  engineers.js         gacha và hành vi tự vận hành của kỹ sư
+  game.js              thời gian, kinh tế, lạm phát, tham nhũng, lòng dân, xây dựng, kịch bản
+  map.js               hàm độ cao địa hình và luật đặt công trình
+  world/terrain.js     lưới địa hình low-poly, mặt nước, giao tia với mặt đất
+  world/scene.js       công trình, đường dây trên cột, lửa, khói, phóng xạ, ngày/đêm
+  world/picking.js     chọn công trình/đường dây bằng chuột
+  world/camera.js      camera quỹ đạo (xoay, di chuyển, thu phóng, cảm ứng)
+  ui/hud.js            thanh chỉ số, bảng thanh tra, bảng quốc gia
+tests/                 kiểm thử lưới, lò, AZ-3 và vòng chơi
 ```
 
-Phần vật lý tách khỏi engine, nên có thể kiểm thử bằng Node và sau này chuyển sang Web Worker khi lưới có hàng nghìn nút.
+Phần vật lý tách khỏi engine, nên kiểm thử được bằng Node và sau này chuyển sang Web Worker khi lưới có hàng nghìn nút.
 
 ## Lộ trình tiếp theo
 
-- **Giai đoạn 3:** bản đồ thành phố có địa hình; nhiều nhà máy và trạm; lưới nhiều nút giải bằng phương pháp dòng công suất; cây công nghệ.
+- **Cây công nghệ:** thanh điều khiển cải tiến bỏ bẫy AZ-3, dây chịu nhiệt, siêu cao thế, lò thế hệ mới.
 - **Giai đoạn 4:** bản đồ thế giới, nhiều quốc gia, AI đối thủ, quân đội, ngoại giao, chính sách.
 - **Lớp 3 (Blueprint):** góc nhìn bên trong nhà máy để tự nối mạch và đặt thiết bị.
 
