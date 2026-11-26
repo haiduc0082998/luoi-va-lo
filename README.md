@@ -88,6 +88,15 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - Cây khai thác 3 cấp; xuất khẩu đất hiếm.
 - **Điều độ viên:** tự đóng lại tuyến bị cắt do quá tải sau 30 phút; trạm thông minh hoặc AI điều độ rút xuống 2 phút.
 
+**Bên trong thành phố (kiểu Cities: Skylines)**
+- Bấm vào một thành phố rồi chọn **Vào thành phố**: khung cảnh đô thị 9 × 9 lô phố, xe cộ chạy theo làn, người đi bộ trên vỉa hè, máy bay bay ngang, cửa sổ sáng theo giờ và theo điện thực tế được cấp.
+- Xây trường học, bệnh viện, đồn cảnh sát, trạm cứu hoả, công viên. Mỗi công trình phủ sóng các lô quanh nó; xây trên đất trống, hoặc phá nhà cũ (giá ×1,5).
+- **Vẽ tuyến metro:** bấm lần lượt các lô để đặt ga và kéo ray trên cao, tàu chạy đi về. Metro giảm tắc đường (ít xe hơn, xe chạy nhanh hơn) nhưng tiêu thụ điện.
+- **Hạnh phúc** = giáo dục, y tế, an ninh, phòng cháy, giải trí, giao thông công cộng, điện ổn định, trừ tắc đường.
+  - Hạnh phúc trên 55% kéo lòng dân cả nước lên và thành phố lớn dần (nhu cầu điện tăng).
+  - Dưới 55% thì ngược lại.
+- Mọi dịch vụ đều tốn chi phí vận hành mỗi ngày và tiêu thụ điện thật trong lưới.
+
 ## Cấu trúc mã
 
 ```
@@ -100,6 +109,9 @@ src/
   world.js             các nước láng giềng, đề nghị, phá hoại, chiến tranh, quân đội canh gác
   weather.js           thời tiết động: nhiệt độ, gió, nước làm mát, thủy văn, sét
   infra.js             xây dựng, bán công trình, mỏ, uranium, đất hiếm, giao thông
+  city.js              mô phỏng đô thị: lô phố, dịch vụ, metro, hạnh phúc, tắc đường, tăng trưởng
+  world/cityview.js    cảnh 3D bên trong thành phố: nhà, xe, người, máy bay, metro trên cao
+  ui/citypanel.js      bảng thành phố: hạnh phúc, công cụ xây, vẽ metro
   world/infra3d.js     trại gió, mỏ, cao tốc, cảng, sân bay, mây, mưa, chớp
   map.js               hàm độ cao địa hình và luật đặt công trình
   world/terrain.js     lưới địa hình low-poly, mặt nước, giao tia với mặt đất

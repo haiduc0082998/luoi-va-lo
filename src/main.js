@@ -3,7 +3,10 @@ import './style.css';
 import * as Game from './game.js';
 import { buildWorld, nodeGround, PICK_RADIUS } from './world/scene.js';
 import { createOrbitCamera } from './world/camera.js';
-import { pick, groundPoint } from './world/picking.js';
+import { pick, groundPoint, planePoint } from './world/picking.js';
+import { ORIGIN, lotFromPoint } from './world/cityview.js';
+import { createCityPanel } from './ui/citypanel.js';
+import * as City from './city.js';
 import { createHud } from './ui/hud.js';
 import { createStage5 } from './ui/stage5.js';
 import * as Infra from './infra.js';
@@ -27,7 +30,7 @@ const fit = () => app.resizeCanvas(stage.clientWidth, stage.clientHeight);
 new ResizeObserver(fit).observe(stage);
 fit();
 
-let world, hud, lineFrom = null, cursor = null;
+let world, hud, lineFrom = null, cursor = null, cityId = null, cityPanel = null;
 
 const HINTS = {
   select: '',
@@ -53,8 +56,43 @@ function nodeClicked(id) {
   if (l) { setTool('select'); hud.select({ kind: 'line', id: l.id }); }
 }
 
+function enterCity(id) {
+  const n = Game.nodeById(G, id);
+  if (!n || n.type !== 'city') return;
+  G.cities[id] ||= City.createCity(n);
+  City.evaluate(G.cities[id], n.frac ?? 1, n.demandBase);
+  cityId = id; setTool('select');
+  world.setMode('city');
+  camera.setBounds(ORIGIN.x, ORIGIN.z, 70);
+  camera.focus(ORIGIN.x, 0, ORIGIN.z, 150, 35, 40); camera.jump();
+  document.body.classList.add('in-city');
+  cityPanel.ui.tool = 'look'; cityPanel.ui.lot = null; cityPanel.show(true);
+  stage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function exitCity() {
+  const C = G.cities[cityId];
+  if (C?.draft) City.finishLine(G, C);
+  const n = Game.nodeById(G, cityId);
+  cityId = null; world.setMode('nation'); world.cityView.setGhost(null);
+  camera.setBounds(0, 0, 120);
+  camera.focus(n.x, 4, n.z, 90, 30, 32); camera.jump();
+  document.body.classList.remove('in-city');
+  cityPanel.show(false);
+}
+function cityClick(x, y) {
+  const p = planePoint(camera.entity, x, y), lot = p && lotFromPoint(p);
+  if (!lot) return;
+  const C = G.cities[cityId], t = cityPanel.ui.tool;
+  cityPanel.ui.lot = lot;
+  if (t === 'metro') City.metroClick(G, C, lot[0], lot[1]);
+  else if (t === 'demolish') City.demolish(G, C, lot[0], lot[1]);
+  else if (t !== 'look') City.buildService(G, C, lot[0], lot[1], t);
+  City.evaluate(C, Game.nodeById(G, cityId).frac ?? 1, Game.nodeById(G, cityId).demandBase);
+}
+
 const camera = createOrbitCamera(app, canvas, {
   onClick(x, y) {
+    if (cityId) return cityClick(x, y);
     const tool = hud.ui.tool;
     if (tool.startsWith('build:')) {
       const p = groundPoint(camera.entity, x, y);
@@ -69,6 +107,13 @@ const camera = createOrbitCamera(app, canvas, {
     if (tool === 'select') hud.select(hit ? { kind: hit.kind, id: hit.id } : null);
   },
   onHover(x, y) {
+    if (cityId) {
+      const p = planePoint(camera.entity, x, y), lot = p && lotFromPoint(p), t = cityPanel.ui.tool;
+      if (!lot || t === 'look') return world.cityView.setGhost(null);
+      const L = City.lotAt(G.cities[cityId], lot[0], lot[1]);
+      const ok = t === 'demolish' ? !!City.SERVICES[L.type] : t === 'metro' ? true : !City.SERVICES[L.type];
+      return world.cityView.setGhost(lot, ok);
+    }
     if (hud.ui.tool === 'select') { cursor = null; return; }
     cursor = groundPoint(camera.entity, x, y);
   },
@@ -86,6 +131,9 @@ hud = createHud(G, {
   },
 });
 const s5 = createStage5(G);
+cityPanel = createCityPanel(G, { onExit: exitCity });
+cityPanel.show(false);
+hud.onEnterCity = enterCity;
 document.getElementById('lineRows').addEventListener('click', (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const v = world.lineViews.get(tr.dataset.id);
@@ -96,6 +144,7 @@ document.getElementById('lineRows').addEventListener('click', (e) => {
 const tags = new Map();
 const screen = new pc.Vec3(), wpos = new pc.Vec3();
 function updateTags() {
+  if (cityId) { for (const el of tags.values()) el.style.display = 'none'; return; }
   for (const [id, el] of tags) if (!G.net.nodes.some((n) => n.id === id)) { el.remove(); tags.delete(id); }
   for (const n of G.net.nodes) {
     if (!tags.has(n.id)) {
@@ -121,7 +170,8 @@ app.on('update', (dt) => {
   const dtReal = Math.min(dt, 0.1);
   Game.advance(G, dtReal);
   camera.update(dtReal);
-  world.update(G, dtReal, camera.entity, hud.ui.selection);
+  world.update(G, dtReal, camera.entity, hud.ui.selection, cityId);
+  if (cityId) cityPanel.render(cityId);
   world.setGhost(G, hud.ui.tool, cursor, lineFrom ? Game.nodeById(G, lineFrom) : null);
   updateTags();
   hud.render();

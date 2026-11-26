@@ -72,12 +72,7 @@ export function fire(parent, p, size, M) {
   };
 }
 
-/** Bộ sinh số giả ngẫu nhiên có hạt giống, để thành phố trông giống nhau mỗi lần tải. */
-export function seeded(str) {
-  let h = 2166136261;
-  for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
-  return () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
-}
+export { seeded } from '../rng.js';
 
 /** Tháp làm mát hyperboloid: xoay một đường cong bán kính quanh trục Y (hai mặt, không có nắp). */
 export function hyperboloid(app, parent, p, m, { height = 22, base = 9.5, waist = 5.8, top = 6.8, waistAt = 0.7, rings = 14, segs = 28, inside = false, shadow = true } = {}) {

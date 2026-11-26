@@ -63,6 +63,14 @@ table.lines tr{cursor:pointer}table.lines tr.sel td{background:color-mix(in srgb
 .log time{color:var(--mute);font-variant-numeric:tabular-nums;margin-right:6px}
 .note{color:var(--mute);font-size:13px;margin:10px 0 0}
 [hidden]{display:none!important}
+.in-city .toolbar,.in-city .modehint{display:none}
+.citypanel{position:absolute;top:10px;right:10px;bottom:10px;width:min(360px,calc(100% - 20px));overflow-y:auto;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:14px;z-index:6}
+.cp-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.cp-head h2{margin:0}
+.cp-big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:8px}.cp-big b{display:block;font:700 22px 'Chakra Petch',sans-serif}
+.cp-row{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:8px;align-items:center;font-size:13px;margin:4px 0}
+.cp-tools{margin-top:10px}.cp-tools button{font-size:14px;min-height:40px;padding:0 10px}
+.btn.primary{background:var(--amber);color:#1d1300;border-color:var(--amber)}
+@media(max-width:700px){.citypanel{top:auto;height:48%}}
 .buildmenu{position:absolute;top:66px;left:10px;width:min(380px,calc(100% - 20px));max-height:calc(100% - 110px);overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;z-index:5;box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .bitem{display:grid;gap:2px;text-align:left;width:100%;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;font-family:inherit}
 .bitem b{font-family:'Chakra Petch',sans-serif;font-size:15px}.bitem small{color:var(--mute);font-size:13px}.bitem span{font-weight:600;font-size:13px;color:var(--amber)}

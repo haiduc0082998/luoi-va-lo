@@ -60,3 +60,11 @@ export function groundPoint(cam, x, y) {
   const p = rayTerrain(o, d, hit);
   return p ? p.clone() : null;
 }
+
+/** Giao tia với mặt phẳng y = 0 (dùng trong cảnh thành phố). */
+export function planePoint(cam, x, y) {
+  const { o, d } = rayFromScreen(cam, x, y);
+  if (d.y >= -1e-4) return null;
+  const t = -o.y / d.y;
+  return new pc.Vec3(o.x + d.x * t, 0, o.z + d.z * t);
+}

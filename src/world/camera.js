@@ -20,19 +20,22 @@ export function createOrbitCamera(app, canvas, { onClick, onHover }) {
   const goal = { ...s, target: s.target.clone() };
   const pointers = new Map();
   let pinch = 0, down = null;
+  const bounds = { x: 0, z: 0, r: 120 };
+  const setBounds = (x, z, r) => { bounds.x = x; bounds.z = z; bounds.r = r; };
 
   const go = (name) => {
     const v = VIEWS[name];
     goal.target.set(...v.target); goal.yaw = v.yaw; goal.pitch = v.pitch; goal.dist = v.dist;
   };
-  const focus = (x, y, z, dist) => { goal.target.set(x, y, z); if (dist) goal.dist = dist; };
+  const focus = (x, y, z, dist, yaw, pitch) => { goal.target.set(x, y, z); if (dist) goal.dist = dist; if (yaw !== undefined) goal.yaw = yaw; if (pitch !== undefined) goal.pitch = pitch; };
+  const jump = () => { s.target.copy(goal.target); s.yaw = goal.yaw; s.pitch = goal.pitch; s.dist = goal.dist; };
   const local = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 
   const pan = (dx, dy) => {
     const y = (s.yaw * Math.PI) / 180, k = goal.dist * 0.0016;
     const rx = Math.cos(y), rz = -Math.sin(y), fx = -Math.sin(y), fz = -Math.cos(y);
-    goal.target.x = clamp(goal.target.x + (-dx * rx + dy * fx) * k, -120, 120);
-    goal.target.z = clamp(goal.target.z + (-dx * rz + dy * fz) * k, -120, 120);
+    goal.target.x = clamp(goal.target.x + (-dx * rx + dy * fx) * k, bounds.x - bounds.r, bounds.x + bounds.r);
+    goal.target.z = clamp(goal.target.z + (-dx * rz + dy * fz) * k, bounds.z - bounds.r, bounds.z + bounds.r);
   };
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -84,5 +87,5 @@ export function createOrbitCamera(app, canvas, { onClick, onHover }) {
     cam.lookAt(s.target);
   }
 
-  return { entity: cam, go, focus, update };
+  return { entity: cam, go, focus, update, setBounds, jump };
 }

@@ -7,6 +7,7 @@ import { rollEngineer, runEngineer } from './engineers.js';
 import { worldStep, createWorld } from './world.js';
 import { createWeather, weatherStep, current as weatherNow, windNow, windFarmMW, hConv, setWeather } from './weather.js';
 import { createResources, infraStep, count as infraCount } from './infra.js';
+import { citiesStep } from './city.js';
 import { buildable, PADS } from './map.js';
 import { fmt } from './util.js';
 import { news } from './news.js';
@@ -68,7 +69,7 @@ export function createGame() {
     market: { retail: 60, contractMW: 200, exportOn: false, sanctionUntil: 0, pressureAt: 0 },
     reputation: 60, factions: { business: 55, military: 55 },
     decrees: { subsidy: false, monopoly: false, defense: false, martial: false },
-    world: createWorld(), weather: createWeather(), res: createResources(), infra: [],
+    world: createWorld(), weather: createWeather(), res: createResources(), infra: [], cities: {}, happiness: 55, cityAcc: 60, cityVersion: 0,
     tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
   };
 }
@@ -154,6 +155,7 @@ function politics(G, dt) {
 
   let dA = fw > 0.999 ? (G.approval < 85 ? 2 : 0) : -14 * (1 - fw);
   dA -= maxRelease(G) * 25;
+  dA += (G.happiness - 55) * 0.05; // dịch vụ đô thị tốt → dân hài lòng
   if (G.inflation > 6) dA -= (G.inflation - 6) * 0.4;
   if (G.corruption > 35) dA -= (G.corruption - 35) * 0.05;
   G.approval = Math.max(0, Math.min(100, G.approval + dA * h));
@@ -203,6 +205,8 @@ export function advance(G, dtReal) {
     }
     buildProgress(G, h);
     infraStep(G, h, U);
+    G.cityAcc += h;
+    if (G.cityAcc >= 60) { citiesStep(G, G.cityAcc); G.cityAcc = 0; }
     worldStep(G, h);
     politics(G, h);
     G.t += h;

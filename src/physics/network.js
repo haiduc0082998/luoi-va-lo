@@ -103,7 +103,7 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
   const byId = new Map(net.nodes.map((n) => [n.id, n]));
   for (const n of net.nodes) {
     const ok = n.state === 'ok';
-    n.demand = !ok ? 0 : n.type === 'city' ? n.demandBase * env.demandMul : n.type === 'border' ? (env.exportMW ?? 0) : n.type === 'mine' ? n.demandBase : 0;
+    n.demand = !ok ? 0 : n.type === 'city' ? n.demandBase * env.demandMul + (n.extraMW ?? 0) : n.type === 'border' ? (env.exportMW ?? 0) : n.type === 'mine' ? n.demandBase : 0;
     n.cap = ok ? env.cap[n.id] ?? 0 : 0;
     n.gen = n.served = n.through = n.frac = n.hz = 0;
   }

@@ -105,7 +105,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     const repair = `<div class="btns"><button class="btn" data-act="repairNode" type="button" ${n.state === 'fire' ? '' : 'hidden'}>Thay máy biến áp (${money(Game.NODE_REPAIR * G.priceLevel)})</button>${n.sellable ? `<button class="btn danger" data-act="sellNode" type="button">Bán (thu hồi ${money(0.7 * n.cost)})</button>` : ''}</div>`;
     if (n.type === 'wind') return `${head}<dl>${row('Đang phát', 'theo lập phương tốc độ gió, định mức 12 m/s', 'wG')}${row('Gió lúc này', 'ngắt bảo vệ khi trên 25 m/s', 'wW')}${tx}</dl>${repair}`;
     if (n.type === 'mine') return `${head}<dl>${row('Điện cấp cho mỏ', 'mất điện thì ngừng khai thác', 'mP')}${row('Uranium trong kho', '', 'mU')}${row('Đất hiếm trong kho', '', 'mR')}${tx}</dl>${repair}`;
-    if (n.type === 'city') return `${head}<dl>${row('Nhu cầu lúc này', 'theo giờ trong ngày và nhiệt độ', 'cD')}${row('Được cấp', '', 'cS')}${row('Tần số tại chỗ', '', 'cH')}${tx}</dl>${repair}`;
+    if (n.type === 'city') return `${head}<div class="btns"><button class="btn primary" data-act="enterCity" type="button">Vào thành phố</button></div><p class="note">Bên trong: xây trường, bệnh viện, công viên, cảnh sát, cứu hoả, vẽ metro để tăng hạnh phúc và lòng dân.</p><dl>${row('Hạnh phúc', 'theo dịch vụ, điện, tắc đường', 'cHap')}${row('Nhu cầu lúc này', 'theo giờ trong ngày và nhiệt độ', 'cD')}${row('Được cấp', '', 'cS')}${row('Tần số tại chỗ', '', 'cH')}${tx}</dl>${repair}`;
     if (n.type === 'hydro') return `${head}<dl>${row('Đang phát', 'chạy sau hạt nhân, trước nhiệt điện; không tốn nhiên liệu', 'hG')}${row('Công suất tối đa', '', 'hM')}${tx}</dl>${repair}`;
     if (n.type === 'border') return `${head}<dl>${row('Hợp đồng xuất khẩu', 'quản lý ở bảng Thị trường điện bên dưới', 'bC')}${row('Đang giao', '', 'bS')}${row('Giá giao ngay', 'cao nhất 19–20 giờ', 'bP')}${tx}</dl>${repair}`;
     if (n.type === 'sub') return `${head}<dl>${row('Công suất đi qua', '', 'sP')}${row('Số tuyến nối vào', '', 'sN')}${tx}</dl>${repair}`;
@@ -162,6 +162,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     if (act === 'unit') { ui.unit = +b.dataset.u; ui.inspKey = ''; }
     if (act === 'unit2') { Game.startUnit2(G); ui.inspKey = ''; }
     if (act === 'guard') World.toggleGuard(G, s.id);
+    if (act === 'enterCity') api.onEnterCity?.(s.id);
     if (act === 'sellNode' && Infra.sell(G, 'node', s.id)) select(null);
     if (act === 'sellInfra' && Infra.sell(G, 'infra', s.id)) select(null);
   });
@@ -207,6 +208,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     if (gb) { const on = World.isGuarded(G, n.id); gb.textContent = on ? `Rút quân canh gác (${G.world.guards.length}/${G.world.troops})` : `Điều quân canh gác (${G.world.guards.length}/${G.world.troops})`; gb.setAttribute('aria-pressed', on); }
     set('nT', `${fmt(n.Tt)} °C`); barSet('nTb', (n.Tt / 160) * 100, rgb(ramp(WIRE_RAMP, 30 + (n.Tt - 40) * 2)));
     if (n.type === 'city') {
+      set('cHap', `${fmt(G.cities[n.id]?.happiness ?? 55)}%`);
       set('cD', `${fmt(n.demand)} MW`); set('cS', `${fmt(n.served)} MW (${fmt(n.frac * 100)}%)`);
       set('cH', n.frac > 0 ? `${fmt(n.hz, 2)} Hz` : 'mất điện');
     } else if (n.type === 'wind') {
@@ -310,5 +312,6 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   function setModeHint(text) { set('modeHint', text); $('modeHint').hidden = !text; }
 
   syncSegs();
-  return { ui, render, select, setModeHint, syncSegs };
+  const api = { ui, render, select, setModeHint, syncSegs, onEnterCity: null };
+  return api;
 }

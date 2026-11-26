@@ -8,6 +8,7 @@ import { hourOfDay, nodeById } from '../game.js';
 import { height, WATER_Y, buildable, riverCenter } from '../map.js';
 import { buildTerrain } from './terrain.js';
 import { createInfra } from './infra3d.js';
+import { createCityView } from './cityview.js';
 import { canPlace, BUILDS } from '../infra.js';
 import { WEATHERS } from '../weather.js';
 import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid, hollowTower, lamp } from './kit.js';
@@ -340,6 +341,13 @@ export function buildWorld(app) {
   };
 
   const infra = createInfra(app, world, M, emit, groundY);
+  const cityView = createCityView(app, M);
+  let mode = 'nation';
+  function setMode(m) {
+    mode = m;
+    for (const ch of world.children) if (ch !== sun && ch !== bounce) ch.enabled = m === 'nation';
+    cityView.show(m !== 'nation');
+  }
   Object.assign(builders, infra.nodeBuilders);
 
   // ---------- Đường dây trên cột ----------
@@ -512,7 +520,7 @@ export function buildWorld(app) {
 
   function setQuality(high) { sun.light.castShadows = high; }
 
-  function update(G, dt, camera, selection) {
+  function update(G, dt, camera, selection, cityId = null) {
     time += dt;
     sync(G);
     const hour = hourOfDay(G), w = WEATHERS[G.weather.id];
@@ -531,6 +539,8 @@ export function buildWorld(app) {
     infra.update(G, dt, day);
 
     M.bulb.emissiveIntensity = clamp((0.55 - day) * 5, 0, 2.5); M.bulb.update();
+    if (cityId) cityView.update(G, G.cities[cityId], dt, day);
+    if (mode !== 'nation') { updatePuffs(dt); return; }
     for (const v of nodeViews.values()) { v.update(G, dt, time, day); if (v.guard) v.guard.enabled = G.world.guards.includes(v.node.id); }
     // Tên lửa / phá hoại: chớp sáng tại điểm bị đánh
     const fx = G.world.strikeFx;
@@ -557,5 +567,5 @@ export function buildWorld(app) {
     }
   }
 
-  return { update, setGhost, lineViews, setQuality, infraViews: infra.views };
+  return { update, setGhost, lineViews, setQuality, infraViews: infra.views, setMode, cityView };
 }
