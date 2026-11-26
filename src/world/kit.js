@@ -78,3 +78,31 @@ export function seeded(str) {
   for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
   return () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
 }
+
+/** Tháp làm mát hyperboloid: xoay một đường cong bán kính quanh trục Y (hai mặt, không có nắp). */
+export function hyperboloid(app, parent, p, m, { height = 22, base = 9.5, waist = 5.8, top = 6.8, waistAt = 0.7, rings = 14, segs = 28 } = {}) {
+  const R = (t) => {
+    if (t < waistAt) { const k = t / waistAt; return waist + (base - waist) * (1 - k) ** 2; }
+    const k = (t - waistAt) / (1 - waistAt); return waist + (top - waist) * k ** 2;
+  };
+  const pos = [], nor = [], idx = [];
+  for (let i = 0; i <= rings; i++) {
+    const t = i / rings, r = R(t), dr = (R(Math.min(1, t + 0.01)) - R(Math.max(0, t - 0.01))) / (0.02 * height);
+    for (let j = 0; j <= segs; j++) {
+      const a = (j / segs) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      pos.push(r * c, t * height, r * s);
+      const n = new pc.Vec3(c, -dr, s).normalize();
+      nor.push(n.x, n.y, n.z);
+    }
+  }
+  for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) {
+    const a = i * (segs + 1) + j, b = a + segs + 1;
+    idx.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  const mesh = new pc.Mesh(app.graphicsDevice);
+  mesh.setPositions(pos); mesh.setNormals(nor); mesh.setIndices(idx); mesh.update();
+  const e = new pc.Entity();
+  e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, m)], castShadows: true, receiveShadows: true });
+  e.setLocalPosition(p[0], p[1], p[2]); parent.addChild(e);
+  return e;
+}

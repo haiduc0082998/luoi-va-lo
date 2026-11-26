@@ -99,7 +99,7 @@ function updateTags() {
     const el = tags.get(n.id);
     wpos.set(n.x, nodeGround(n) + PICK_RADIUS[n.type] + 4, n.z);
     camera.entity.camera.worldToScreen(wpos, screen);
-    const visible = screen.z > 0 && screen.x > 0 && screen.x < stage.clientWidth && screen.y > 20 && screen.y < stage.clientHeight;
+    const visible = screen.z > 0 && screen.x > 0 && screen.x < stage.clientWidth && screen.y > 72 && screen.y < stage.clientHeight - 20;
     el.style.display = visible ? '' : 'none';
     if (!visible) continue;
     el.style.transform = `translate(${screen.x}px, ${screen.y}px) translate(-50%, -100%)`;

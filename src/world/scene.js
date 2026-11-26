@@ -7,7 +7,7 @@ import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
 import { height, WATER_Y, buildable } from '../map.js';
 import { buildTerrain } from './terrain.js';
-import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded } from './kit.js';
+import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid } from './kit.js';
 
 const SEG = 6;
 export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0] };
@@ -35,6 +35,8 @@ export function buildWorld(app) {
     plume: mat('#ff6a3d', { opacity: 0.18, emissive: '#ff4a20', ei: 0.3 }),
     flameA: mat('#000000', { emissive: '#ff5434', ei: 3 }), flameB: mat('#000000', { emissive: '#ffc04a', ei: 3 }),
     marker: mat('#000000', { emissive: '#ffd24a', ei: 2 }),
+    ring: mat('#0b2230', { emissive: '#28beff', ei: 1.2 }), pulse: mat('#000000', { emissive: '#5ff5ff', ei: 3 }),
+    tower: (() => { const m = mat('#c9ccc4', { gloss: 0.2 }); m.cull = pc.CULLFACE_NONE; m.update(); return m; })(),
     ghostOk: mat('#36b2ff', { opacity: 0.45, emissive: '#36b2ff', ei: 0.6 }),
     ghostBad: mat('#ff5434', { opacity: 0.45, emissive: '#ff5434', ei: 0.6 }),
   };
@@ -98,8 +100,9 @@ export function buildWorld(app) {
       ent(g, 'box', [18, 7.3, 2], [13.4, 0.8, 9.4], M.roof);
       ent(g, 'box', [14, 4, 9], [5, 8, 3], M.metal); // trạm phân phối
       const tx = n.x + 18, tz = n.z - 12, ty = groundY(tx, tz);
-      meshEnt(app, world, new pc.ConeGeometry({ baseRadius: 8, peakRadius: 5, height: 14, heightSegments: 1, capSegments: 28 }), [tx, ty + 7, tz], M.concrete);
-      meshEnt(app, world, new pc.ConeGeometry({ baseRadius: 5, peakRadius: 6, height: 8, heightSegments: 1, capSegments: 28 }), [tx, ty + 18, tz], M.concrete);
+      hyperboloid(app, world, [tx, ty - 0.5, tz], M.tower);
+      // Vòng phát sáng Cherenkov quanh vỏ lò: xanh khi ổn định, cam rồi đỏ khi quá nhiệt
+      meshEnt(app, g, new pc.TorusGeometry({ ringRadius: 9.25, tubeRadius: 0.32, segments: 40, sides: 8 }), [0, 4.2, 0], M.ring);
       ent(g, 'box', [-14, 1.5, 10], [4, 3, 3], M.concrete);
       const lamp = ent(g, 'sphere', [-14, 3.4, 10], [0.9, 0.9, 0.9], M.lamp, false);
       void lamp;
@@ -135,6 +138,10 @@ export function buildWorld(app) {
           plume.setLocalEulerAngles(0, -R.wind, 0);
           plume.setLocalScale(10 + R.plume * 30, 5 + R.plume * 5, len * 2);
         }
+        const hotK = clamp((R.T - 380) / 400, 0, 1);
+        col255(hotK > 0 ? [255, Math.round(150 - 120 * hotK), 30] : [40, 190, 255], M.ring.emissive);
+        M.ring.emissiveIntensity = R.melt ? 3 : 0.4 + clamp((R.Pf / RATED) * 1.2, 0, 2.5) + hotK * 2;
+        M.ring.update();
         acc += dt * 5 * clamp(R.Pe / (0.33 * RATED), 0, 1);
         while (acc >= 1) { acc -= 1; emit(tx, ty + 22, tz, '#f3f5f4', 5, 9); }
       };
@@ -254,11 +261,28 @@ export function buildWorld(app) {
       return out.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - 4 * sag * t * (1 - t), a.z + (b.z - a.z) * t);
     };
     let lastKey = '';
+    // Hạt năng lượng chạy dọc pha giữa: tốc độ theo MW, chiều theo hướng công suất
+    const pulseSize = l.kv >= 500 ? 0.75 : l.kv >= 220 ? 0.6 : 0.45;
+    const nPulse = Math.max(3, spans * 2);
+    const pulses = Array.from({ length: nPulse }, (_, i) => ({
+      e: ent(g, 'sphere', [0, -50, 0], [pulseSize, pulseSize, pulseSize], M.pulse, false), u: i / nPulse,
+    }));
+    const PP = new pc.Vec3();
     return {
       g, polyline: tops, mid: at(0.5),
-      update(t, selected) {
+      update(t, selected, dt = 0) {
         const broken = l.state === 'fire', live = lineUsable(l);
         const sag = (0.5 + clamp((l.Tw - 40) * 0.03, 0, 4.5)) * (dist / spans / 14);
+        const flowing = live && Math.abs(l.P) > 1;
+        const speed = clamp(Math.abs(l.P) / 600, 0.05, 1.6) * (120 / Math.max(dist, 20)) * Math.sign(l.P) * 0.5;
+        for (const p of pulses) {
+          p.e.enabled = flowing;
+          if (!flowing) continue;
+          p.u = (((p.u + speed * dt) % 1) + 1) % 1;
+          const f = p.u * spans, s = Math.min(spans - 1, Math.floor(f));
+          pointOn(phases[1][s], phases[1][s + 1], f - s, sag, false, PP);
+          p.e.setPosition(PP);
+        }
         const key = `${broken}|${sag.toFixed(2)}`;
         if (key !== lastKey) {
           lastKey = key;
@@ -325,6 +349,11 @@ export function buildWorld(app) {
   const sun = new pc.Entity('sun');
   sun.addComponent('light', { type: 'directional', castShadows: true, shadowResolution: 2048, shadowDistance: 260, shadowBias: 0.3, normalOffsetBias: 0.05, intensity: 1.2 });
   world.addChild(sun);
+  // Ánh sáng hắt từ mặt đất (thay cho đèn bán cầu): chiếu ngược lên, màu cỏ, không đổ bóng
+  const bounce = new pc.Entity('bounce');
+  bounce.addComponent('light', { type: 'directional', castShadows: false, color: col('#7f9e6a'), intensity: 0.25 });
+  bounce.setEulerAngles(180, 0, 20);
+  world.addChild(bounce);
   app.scene.fog.type = pc.FOG_LINEAR; app.scene.fog.start = 200; app.scene.fog.end = 560;
   const DAY = col('#a9c4d6'), NIGHT = col('#0b1420'), sky = new pc.Color();
   let time = 0;
@@ -337,12 +366,14 @@ export function buildWorld(app) {
     const hour = hourOfDay(G), day = clamp(Math.sin(((hour - 6) / 12) * Math.PI) + 0.15, 0, 1);
     sun.setEulerAngles(35, 30, clamp((hour - 12) * 12, -80, 80));
     sun.light.intensity = 0.08 + 1.3 * day;
+    bounce.light.intensity = 0.05 + 0.28 * day;
+    sun.light.color = hour > 6 && hour < 8.5 || hour > 16.5 && hour < 19 ? col('#ffd9a8') : col('#fff4e0');
     app.scene.ambientLight.set(0.1 + 0.3 * day, 0.12 + 0.32 * day, 0.16 + 0.32 * day);
     sky.lerp(NIGHT, DAY, day);
     camera.camera.clearColor = sky; app.scene.fog.color = sky;
 
     for (const v of nodeViews.values()) v.update(G, dt, time, day);
-    for (const v of lineViews.values()) v.update(time, selection?.kind === 'line' && selection.id === v.line.id);
+    for (const v of lineViews.values()) v.update(time, selection?.kind === 'line' && selection.id === v.line.id, dt);
     updatePuffs(dt);
 
     marker.enabled = !!selection;

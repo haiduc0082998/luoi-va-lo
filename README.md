@@ -17,7 +17,11 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
-- Bấm vào nhà máy, trạm, thành phố hoặc đường dây để xem thông số và điều khiển. Ngày và đêm chạy theo đồng hồ trong game.
+- Bấm vào nhà máy, trạm, thành phố hoặc đường dây để xem thông số và điều khiển.
+- Ngày và đêm chạy theo đồng hồ trong game, có nút tua nhanh tới tối hoặc sáng. Thành phố lên đèn ban đêm, tắt ngấm khi mất điện.
+- Hạt năng lượng chạy dọc dây: nhanh hay chậm theo công suất, đúng chiều dòng công suất, dừng khi tuyến bị cắt.
+- Tháp làm mát hyperboloid nhả hơi theo điện phát ra; vòng Cherenkov quanh nhà lò xanh khi ổn định, cam rồi đỏ khi quá nhiệt.
+- Sương mù theo chiều sâu, ánh sáng hắt từ mặt đất, nắng sớm và hoàng hôn ngả vàng; nút đồ hoạ thấp tắt đổ bóng cho máy yếu.
 - **Xây trạm:** đặt trạm biến áp lên mặt đất (không xây trên sông hay sát công trình khác).
 - **Kéo dây:** chọn điểm đầu, điểm cuối. Chiều dài tính theo bản đồ, cột điện tự dựng theo địa hình, R = ρL/A tự tính.
 

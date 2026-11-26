@@ -41,6 +41,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   seg('views', ['overview', 'nuclear', 'capital', 'west'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây' }[v]), () => view, (v) => { view = v; onView(v); });
   seg('newKv', [10.5, 110, 220, 500], kvText, () => ui.newKv, (v) => (ui.newKv = v));
   seg('newA', [95, 150, 240, 400, 630], (v) => v, () => ui.newA, (v) => (ui.newA = v));
+  $('skipDN').addEventListener('click', () => Game.skipDayNight(G));
   $('quality').addEventListener('click', () => { ui.quality = !ui.quality; $('quality').textContent = `Đồ hoạ: ${ui.quality ? 'cao' : 'thấp'}`; onQuality(ui.quality); });
 
   // ---------- Bảng quốc gia ----------
@@ -189,7 +190,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   let rowsKey = '';
   function render() {
     const S = G.net.summary ?? { demand: 0, served: 0, gen: 0, loss: 0, hz: 0 };
-    set('clock', Game.clockText(G.t)); set('budget', money(G.budget));
+    set('clock', Game.clockText(G.t));
+    { const h = Game.hourOfDay(G); set('skipDN', h >= 7 && h < 20 ? 'Tua tới tối' : 'Tua tới sáng'); } set('budget', money(G.budget));
     set('apV', `${fmt(G.approval)}%`); barSet('apBar', G.approval, G.approval < 30 ? 'var(--hot)' : G.approval < 50 ? 'var(--amber)' : 'var(--cool)');
     const secPct = S.demand > 0 ? (S.served / S.demand) * 100 : 100;
     set('sec', `${fmt(secPct)}%`); $('sec').className = secPct < 99 ? 'bad' : '';

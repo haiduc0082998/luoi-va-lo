@@ -190,6 +190,13 @@ export function buildLine(G, aId, bId, kv, A) {
   return l;
 }
 
+/** Tua nhanh đồng hồ tới 20:00 (nếu đang ban ngày) hoặc 07:00 hôm sau. Mô phỏng không chạy trong khoảng nhảy. */
+export function skipDayNight(G) {
+  const h = hourOfDay(G), target = h >= 7 && h < 20 ? 20 : 7;
+  G.t += ((target - h + 24) % 24) * 3600;
+  news(G, target === 20 ? 'Tua nhanh tới 20:00: giờ cao điểm buổi tối, thành phố lên đèn.' : 'Tua nhanh tới 07:00 sáng.');
+}
+
 export function demolishLine(G, id) {
   G.net.lines = G.net.lines.filter((l) => l.id !== id); G.version++;
   news(G, 'Đã tháo dỡ một tuyến dây.');
