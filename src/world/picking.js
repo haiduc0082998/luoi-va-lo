@@ -2,6 +2,8 @@
 import * as pc from 'playcanvas';
 import { rayTerrain } from './terrain.js';
 import { PICK_RADIUS, nodeGround } from './scene.js';
+import { INFRA_PICK } from './infra3d.js';
+import { height } from '../map.js';
 
 const from = new pc.Vec3(), to = new pc.Vec3(), dir = new pc.Vec3(), hit = new pc.Vec3();
 
@@ -25,7 +27,7 @@ function raySegment(o, d, p, q) {
   return { dist: pr.distance(po), t: s };
 }
 
-export function pick(cam, x, y, G, lineViews) {
+export function pick(cam, x, y, G, lineViews, infraViews = new Map()) {
   const { o, d } = rayFromScreen(cam, x, y);
   let best = null;
   for (const n of G.net.nodes) {
@@ -35,6 +37,14 @@ export function pick(cam, x, y, G, lineViews) {
     const t = -b - Math.sqrt(disc);
     if (t > 0 && (!best || t < best.t)) best = { kind: 'node', id: n.id, t };
   }
+  for (const s of G.infra) {
+    const r = INFRA_PICK[s.type], c = new pc.Vec3(s.x, Math.max(height(s.x, s.z), -1.2) + r * 0.4, s.z);
+    const oc = new pc.Vec3().sub2(o, c), b = oc.dot(d), disc = b * b - (oc.dot(oc) - r * r);
+    if (disc < 0) continue;
+    const t = -b - Math.sqrt(disc);
+    if (t > 0 && (!best || t < best.t)) best = { kind: 'infra', id: s.id, t };
+  }
+  void infraViews;
   for (const [id, v] of lineViews) {
     const pts = v.polyline;
     for (let i = 0; i < pts.length - 1; i++) {

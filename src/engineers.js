@@ -1,5 +1,5 @@
 // Gacha kỹ sư: thuê người tự vận hành lò. Tham nhũng cao thì dễ "trúng" kỹ sư rởm.
-import { RATED, FLOW_NOM, CP_WATER, EPS, T_IN, pumpsPowered as anyPump } from './physics/reactor.js';
+import { RATED, FLOW_NOM, CP_WATER, EPS, inletTemp, pumpsPowered as anyPump } from './physics/reactor.js';
 
 export const ENGINEERS = {
   fake: { tier: 'fake', name: 'Kỹ sư “con ông cháu cha”', skill: 20, salary: 0.05,
@@ -21,7 +21,7 @@ const CREF = FLOW_NOM * CP_WATER * EPS;
 /** Vị trí thanh để lò cân bằng ở công suất nhiệt P (từ phương trình độ phản ứng = 0). */
 export function rodForPower(R, P) {
   const flow = Math.max(R.flow, 0.05);
-  const T = T_IN + P / (flow * CREF);
+  const T = inletTemp(R) + P / (flow * CREF);
   return 50 + (T - 300) / 2.7;
 }
 
@@ -59,7 +59,7 @@ export function runEngineer(E, R, wantMWe, rnd = Math.random, emit = () => {}) {
 
   if (R.scram) {
     // Khởi động lại khi nguyên nhân đã hết
-    const okToRestart = !R.loca && R.flow > 0.9 && R.T < 330 && R.p < 16 && pumpsPowered;
+    const okToRestart = !R.loca && !R.noFuel && R.flow > 0.9 && R.T < 330 && R.p < 16 && pumpsPowered;
     if (okToRestart && rnd() < (legend ? 0.2 : 0.05)) {
       R.scram = false; R.rodCmd = R.rod;
       emit(`${E.name} giải trừ SCRAM, nâng công suất lò trở lại.`);

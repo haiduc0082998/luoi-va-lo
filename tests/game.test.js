@@ -6,6 +6,7 @@ const runHours = (G, h) => { G.speed = 60; for (let i = 0; i < h * 60; i++) adva
 
 test('một ngày vận hành bình thường: không sự cố, lưới đủ điện, có lãi', () => {
   const G = createGame();
+  G.weather.until = 1e12; // giữ trời nắng đẹp để kết quả ổn định
   const b0 = G.budget;
   runHours(G, 24);
   const bad = G.news.filter((n) => n.level === 'bad');
@@ -21,7 +22,7 @@ test('xây trạm và kéo dây mới làm tăng số nút và tuyến', () => {
   assert.ok(s);
   assert.ok(buildLine(G, s.id, 'capital', 220, 400));
   assert.ok(buildLine(G, s.id, 'subW', 220, 400));
-  assert.equal(G.net.nodes.length, 9);
+  assert.equal(G.net.nodes.length, 10);
   runHours(G, 2);
   assert.ok(G.net.lines.at(-1).P !== 0);
 });

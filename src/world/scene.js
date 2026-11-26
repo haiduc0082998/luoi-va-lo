@@ -7,11 +7,14 @@ import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
 import { height, WATER_Y, buildable, riverCenter } from '../map.js';
 import { buildTerrain } from './terrain.js';
+import { createInfra } from './infra3d.js';
+import { canPlace, BUILDS } from '../infra.js';
+import { WEATHERS } from '../weather.js';
 import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid, hollowTower, lamp } from './kit.js';
 
 const SEG = 6;
-export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0] };
-export const PICK_RADIUS = { nuclear: 17, coal: 10, sub: 6, city: 14, hydro: 13, border: 9 };
+export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0], wind: [0, 9, 0], mine: [8, 13, 0] };
+export const PICK_RADIUS = { nuclear: 17, coal: 10, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14 };
 const groundY = (x, z) => Math.max(height(x, z), WATER_Y);
 
 export function attachPoint(n, out = new pc.Vec3()) {
@@ -336,6 +339,9 @@ export function buildWorld(app) {
     },
   };
 
+  const infra = createInfra(app, world, M, emit, groundY);
+  Object.assign(builders, infra.nodeBuilders);
+
   // ---------- Đường dây trên cột ----------
   function buildLine(l, A, B) {
     const g = new pc.Entity(`line-${l.id}`); world.addChild(g);
@@ -452,6 +458,8 @@ export function buildWorld(app) {
   const strikeLight = light(world, [0, -50, 0], '#ffb070', 70);
   let strikeT = 0, seenStrikes = 0;
   function sync(G) {
+    for (const [id, v] of nodeViews) if (!G.net.nodes.some((n) => n.id === id)) { v.g.destroy(); v.guard?.destroy(); nodeViews.delete(id); }
+    infra.sync(G);
     for (const n of G.net.nodes) {
       if (nodeViews.has(n.id)) continue;
       const g = new pc.Entity(`node-${n.id}`); world.addChild(g);
@@ -470,14 +478,22 @@ export function buildWorld(app) {
   const ghostLine = ent(world, 'box', [0, -50, 0], [0.4, 0.4, 1], M.ghostOk, false);
   ghost.enabled = ghostLine.enabled = false;
   const gp = new pc.Vec3(), gq = new pc.Vec3();
+  const GHOST_SIZE = { sub: [9, 7, 9], wind: [18, 18, 18], city: [22, 14, 22], tower: [18, 22, 18], road: [6, 1, 46], port: [10, 6, 18], airport: [50, 2, 7] };
   function setGhost(G, mode, cursor, from) {
-    ghost.enabled = mode === 'sub' && !!cursor;
+    const bt = mode?.startsWith('build:') ? mode.slice(6) : null;
+    ghost.enabled = !!bt && !!cursor;
     ghostLine.enabled = mode === 'line' && !!cursor && !!from;
     if (ghost.enabled) {
-      const ok = !buildable(cursor.x, cursor.z, G.net.nodes);
+      const ok = !canPlace(G, bt, cursor.x, cursor.z);
       ghost.render.meshInstances[0].material = ok ? M.ghostOk : M.ghostBad;
-      ghost.setPosition(cursor.x, height(cursor.x, cursor.z) + 3.5, cursor.z);
+      const [sx, sy, sz] = GHOST_SIZE[bt];
+      ghost.setLocalScale(sx, sy, sz);
+      let yaw = 0;
+      if (bt === 'road') { const c = G.net.nodes.filter((n) => n.type === 'city').sort((a, b) => Math.hypot(a.x - cursor.x, a.z - cursor.z) - Math.hypot(b.x - cursor.x, b.z - cursor.z))[0]; yaw = (Math.atan2(c.x - cursor.x, c.z - cursor.z) * 180) / Math.PI; }
+      ghost.setEulerAngles(0, yaw, 0);
+      ghost.setPosition(cursor.x, Math.max(height(cursor.x, cursor.z), WATER_Y) + sy / 2, cursor.z);
     }
+    void BUILDS; void buildable;
     if (ghostLine.enabled) setBeam(ghostLine, attachPoint(from, gp), gq.set(cursor.x, cursor.y + 8, cursor.z), 0.5);
   }
 
@@ -491,7 +507,7 @@ export function buildWorld(app) {
   bounce.setEulerAngles(180, 0, 20);
   world.addChild(bounce);
   app.scene.fog.type = pc.FOG_LINEAR; app.scene.fog.start = 200; app.scene.fog.end = 560;
-  const DAY = col('#a9c4d6'), NIGHT = col('#0b1420'), sky = new pc.Color();
+  const NIGHT = col('#0b1420'), DAYW = new pc.Color(), FLASH = col('#e8eeff'), sky = new pc.Color();
   let time = 0;
 
   function setQuality(high) { sun.light.castShadows = high; }
@@ -499,14 +515,20 @@ export function buildWorld(app) {
   function update(G, dt, camera, selection) {
     time += dt;
     sync(G);
-    const hour = hourOfDay(G), day = clamp(Math.sin(((hour - 6) / 12) * Math.PI) + 0.15, 0, 1);
+    const hour = hourOfDay(G), w = WEATHERS[G.weather.id];
+    const day = clamp(Math.sin(((hour - 6) / 12) * Math.PI) + 0.15, 0, 1) * (G.weather.id === 'storm' ? 0.55 : 1);
     sun.setEulerAngles(35, 30, clamp((hour - 12) * 12, -80, 80));
     sun.light.intensity = 0.08 + 1.3 * day;
     bounce.light.intensity = 0.05 + 0.28 * day;
     sun.light.color = hour > 6 && hour < 8.5 || hour > 16.5 && hour < 19 ? col('#ffd9a8') : col('#fff4e0');
     app.scene.ambientLight.set(0.1 + 0.3 * day, 0.12 + 0.32 * day, 0.16 + 0.32 * day);
-    sky.lerp(NIGHT, DAY, day);
+    DAYW.fromString(w.sky);
+    sky.lerp(NIGHT, DAYW, day);
+    const flashK = infra.weather(G, dt, camera.getPosition());
+    if (flashK > 0.5) sky.lerp(sky, FLASH, 0.6);
     camera.camera.clearColor = sky; app.scene.fog.color = sky;
+    app.scene.fog.start = G.weather.id === 'storm' ? 90 : 200; app.scene.fog.end = G.weather.id === 'storm' ? 330 : 560;
+    infra.update(G, dt, day);
 
     M.bulb.emissiveIntensity = clamp((0.55 - day) * 5, 0, 2.5); M.bulb.update();
     for (const v of nodeViews.values()) { v.update(G, dt, time, day); if (v.guard) v.guard.enabled = G.world.guards.includes(v.node.id); }
@@ -535,5 +557,5 @@ export function buildWorld(app) {
     }
   }
 
-  return { update, setGhost, lineViews, setQuality };
+  return { update, setGhost, lineViews, setQuality, infraViews: infra.views };
 }

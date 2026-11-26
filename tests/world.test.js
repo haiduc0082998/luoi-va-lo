@@ -8,6 +8,7 @@ const runHours = (G, h) => { G.speed = 60; for (let i = 0; i < h * 60 && !G.over
 
 test('tổ máy số 2: cần công nghệ, xây 3 ngày, rồi phát thêm điện', () => {
   const G = createGame();
+  G.weather.until = 1e12;
   G.budget = 200; G.rp = 500;
   startUnit2(G);
   assert.equal(G.unit2.state, 'none');

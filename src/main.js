@@ -6,6 +6,7 @@ import { createOrbitCamera } from './world/camera.js';
 import { pick, groundPoint } from './world/picking.js';
 import { createHud } from './ui/hud.js';
 import { createStage5 } from './ui/stage5.js';
+import * as Infra from './infra.js';
 import { fmt } from './util.js';
 
 const G = Game.createGame();
@@ -30,16 +31,18 @@ let world, hud, lineFrom = null, cursor = null;
 
 const HINTS = {
   select: '',
-  sub: 'Xây trạm: bấm lên mặt đất (xanh = đặt được, đỏ = không). Không xây trên sông hay sát công trình khác.',
   line: 'Kéo dây: bấm công trình đầu tiên…',
+  sell: 'Bán công trình: bấm vào công trình tự xây để thu hồi 70% chi phí. Hạ tầng cốt lõi không bán được.',
 };
 function setTool(t) {
   hud.ui.tool = t; lineFrom = null; hud.syncSegs();
-  hud.setModeHint(HINTS[t]);
+  const b = t.startsWith('build:') ? Infra.BUILDS[t.slice(6)] : null;
+  hud.setModeHint(b ? `Xây ${b.name.toLowerCase()} (${fmt(Infra.buildCost(G, t.slice(6)), 1)} triệu USD): bấm lên mặt đất. Khối xanh là đặt được, đỏ là không. ${b.desc}` : HINTS[t]);
 }
 
 /** Bấm vào một công trình (trên bản đồ hoặc nhãn tên): chọn, hoặc làm đầu/cuối tuyến dây mới. */
 function nodeClicked(id) {
+  if (hud.ui.tool === 'sell') { if (Infra.sell(G, 'node', id)) hud.select(null); return; }
   if (hud.ui.tool !== 'line') return hud.select({ kind: 'node', id });
   if (!lineFrom) {
     lineFrom = id;
@@ -53,15 +56,16 @@ function nodeClicked(id) {
 const camera = createOrbitCamera(app, canvas, {
   onClick(x, y) {
     const tool = hud.ui.tool;
-    if (tool === 'sub') {
+    if (tool.startsWith('build:')) {
       const p = groundPoint(camera.entity, x, y);
       if (!p) return;
-      const n = Game.buildSubstation(G, p.x, p.z);
-      if (n) { setTool('select'); hud.select({ kind: 'node', id: n.id }); }
+      const made = Infra.build(G, tool.slice(6), p.x, p.z);
+      if (made) { setTool('select'); hud.select({ kind: made.demand !== undefined ? 'node' : 'infra', id: made.id }); }
       return;
     }
-    const hit = pick(camera.entity, x, y, G, world.lineViews);
+    const hit = pick(camera.entity, x, y, G, world.lineViews, world.infraViews);
     if (hit?.kind === 'node') return nodeClicked(hit.id);
+    if (tool === 'sell') { if (hit?.kind === 'infra' && Infra.sell(G, 'infra', hit.id)) hud.select(null); return; }
     if (tool === 'select') hud.select(hit ? { kind: hit.kind, id: hit.id } : null);
   },
   onHover(x, y) {
@@ -92,6 +96,7 @@ document.getElementById('lineRows').addEventListener('click', (e) => {
 const tags = new Map();
 const screen = new pc.Vec3(), wpos = new pc.Vec3();
 function updateTags() {
+  for (const [id, el] of tags) if (!G.net.nodes.some((n) => n.id === id)) { el.remove(); tags.delete(id); }
   for (const n of G.net.nodes) {
     if (!tags.has(n.id)) {
       const el = document.createElement('div'); el.className = 'tag'; stage.appendChild(el);
@@ -105,7 +110,7 @@ function updateTags() {
     el.style.display = visible ? '' : 'none';
     if (!visible) continue;
     el.style.transform = `translate(${screen.x}px, ${screen.y}px) translate(-50%, -100%)`;
-    const status = n.state === 'fire' ? ' · CHÁY' : n.type === 'hydro' ? ` · ${fmt(n.gen)} MW` : n.type === 'border' ? (G.market.exportOn ? ` · xuất ${fmt(n.served)} MW` : '') : n.type === 'city' ? ` · ${fmt(n.served)}/${fmt(n.demand)} MW` : n.type === 'nuclear' ? ` · ${fmt(G.reactor.Pe / 1e6)} MW` : n.type === 'coal' ? ` · ${fmt(n.gen)} MW` : '';
+    const status = n.state === 'fire' ? ' · CHÁY' : n.type === 'hydro' || n.type === 'wind' ? ` · ${fmt(n.gen)} MW` : n.type === 'mine' ? ` · ${fmt(G.res.U, 1)} t U` : n.type === 'border' ? (G.market.exportOn ? ` · xuất ${fmt(n.served)} MW` : '') : n.type === 'city' ? ` · ${fmt(n.served)}/${fmt(n.demand)} MW` : n.type === 'nuclear' ? ` · ${fmt(G.reactor.Pe / 1e6)} MW` : n.type === 'coal' ? ` · ${fmt(n.gen)} MW` : '';
     const text = n.name + status;
     if (el.textContent !== text) el.textContent = text;
     el.classList.toggle('alert', n.state === 'fire' || (n.type === 'city' && n.frac < 0.99) || (n.type === 'nuclear' && (G.reactor.scram || G.reactor.boom)));
@@ -127,3 +132,4 @@ Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai tr�
 setTool('select');
 app.start();
 window.__game = G; // để kiểm thử và gỡ lỗi
+window.__build = (type, x, z) => Infra.build(G, type, x, z);

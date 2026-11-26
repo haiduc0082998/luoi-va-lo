@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–5)
+## Có gì trong bản này (Giai đoạn 1–6)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -66,6 +66,28 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 - Trong bảng nhà máy hạt nhân: lưới ngoài → CB1 → thanh cái A (bơm 1, 2); diesel → CB2 → thanh cái B (bơm 3, 4); CB3 nối hai thanh cái. Bấm máy cắt để đóng hoặc mở, đường có điện sáng màu hổ phách.
 - Diesel tự khởi động khi thanh cái A mất nguồn lưới. Mở nhầm máy cắt có thể làm bơm mất điện, lò SCRAM, rồi kéo theo quá tải dây và mất điện dây chuyền.
 
+**Giai đoạn 6: thời tiết, tài nguyên, giao thông**
+- **Thời tiết động:** nắng đẹp, gió mạnh, nắng nóng cực đoan, bão; tự chuyển sau 6–16 giờ hoặc đổi bằng nút.
+  - Nhiệt độ không khí và gió đổi khả năng tản nhiệt của dây (gió càng mạnh dây càng mát).
+  - Nắng nóng làm nước làm mát nóng lên 8 °C nên lò phải giảm công suất, giống nhà máy thật.
+  - Bão: sét đánh cắt tuyến. Rơ-le bật thì tự đóng lại sau 30 giây, rơ-le tắt thì cháy dây. Mưa làm hồ thủy điện đầy hơn, khô hạn thì vơi.
+  - 3D: mây trôi theo gió, mưa, chớp sét, bầu trời đổi màu.
+- **Xây dựng (nút “Xây dựng ▾”):**
+  - Trạm biến áp.
+  - Trại điện gió 120 MW: công suất theo lập phương tốc độ gió, ngắt khi gió trên 25 m/s, tốn đất hiếm.
+  - Tháp làm mát phụ: hạ 3 °C nước làm mát, tối đa 3 tháp.
+  - Khu đô thị mới.
+  - Cao tốc có xe tải: +25% sản lượng mỏ.
+  - Cảng sông có cần cẩu và tàu chạy trên sông: đất hiếm +30% giá, phí cảng.
+  - Sân bay có máy bay cất cánh và bay vòng: gacha −30%, nghiên cứu +15%, du lịch.
+  - Mỗi loại có luật đặt riêng: cảng phải sát bờ sông, sân bay cần đất bằng…
+- **Chế độ Bán:** hoàn 70% chi phí công trình tự xây; hạ tầng cốt lõi không bán được.
+- **Tài nguyên:**
+  - Mỏ uranium và đất hiếm là một phụ tải 60 MW trong lưới, mất điện thì ngừng khai thác.
+  - Mỗi tổ máy đốt khoảng 1 tấn uranium mỗi ngày; hết uranium là lò dừng.
+  - Cây khai thác 3 cấp; xuất khẩu đất hiếm.
+- **Điều độ viên:** tự đóng lại tuyến bị cắt do quá tải sau 30 phút; trạm thông minh hoặc AI điều độ rút xuống 2 phút.
+
 ## Cấu trúc mã
 
 ```
@@ -76,6 +98,9 @@ src/
   game.js              thời gian, kinh tế, lạm phát, tham nhũng, lòng dân, xây dựng, kịch bản
   policy.js            thị trường điện, phe phái, sắc lệnh, cây công nghệ, điều kiện thua
   world.js             các nước láng giềng, đề nghị, phá hoại, chiến tranh, quân đội canh gác
+  weather.js           thời tiết động: nhiệt độ, gió, nước làm mát, thủy văn, sét
+  infra.js             xây dựng, bán công trình, mỏ, uranium, đất hiếm, giao thông
+  world/infra3d.js     trại gió, mỏ, cao tốc, cảng, sân bay, mây, mưa, chớp
   map.js               hàm độ cao địa hình và luật đặt công trình
   world/terrain.js     lưới địa hình low-poly, mặt nước, giao tia với mặt đất
   world/scene.js       công trình, đường dây trên cột, lửa, khói, phóng xạ, ngày/đêm
@@ -90,7 +115,7 @@ Phần vật lý tách khỏi engine, nên kiểm thử được bằng Node và
 
 ## Ý tưởng mở rộng
 
-- Thêm loại nhà máy: điện gió, mặt trời, pin lưu trữ để tích điện ban đêm, bán giờ cao điểm.
+- Điện mặt trời và pin lưu trữ để tích điện ban đêm, bán giờ cao điểm.
 - Lưu và tải ván chơi; bảng thành tích.
 - Mỗi nước láng giềng có lưới điện riêng mô phỏng thật, có thể mua điện khi mình thiếu.
 

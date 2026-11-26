@@ -20,7 +20,7 @@ export const TECHS = [
   { id: 'accc', branch: 'grid', name: 'Dây chịu nhiệt lõi composite', cost: 30, req: [],
     desc: 'Dây chịu tới 350 °C mới cháy thay vì 250 °C (áp dụng cho mọi tuyến).' },
   { id: 'smartsub', branch: 'grid', name: 'Trạm biến áp thông minh', cost: 50, req: ['accc'],
-    desc: 'Máy biến áp chịu tải gấp 1,5 lần; rơ-le tự đóng lại sau 2 phút nếu tuyến nguội.' },
+    desc: 'Máy biến áp chịu tải gấp 1,5 lần; tuyến bị cắt do quá tải tự đóng lại sau 2 phút thay vì 30 phút.' },
   { id: 'uhv', branch: 'grid', name: 'Siêu cao thế 750 kV', cost: 60, req: ['accc'],
     desc: 'Mở khoá cấp điện áp 750 kV cho tuyến mới: dòng nhỏ hơn, tổn hao thấp hơn.' },
   { id: 'supercond', branch: 'grid', name: 'Đường dây siêu dẫn', cost: 140, req: ['uhv', 'smartsub'],
@@ -31,7 +31,7 @@ export const TECHS = [
   { id: 'audit', branch: 'gov', name: 'Kiểm toán số', cost: 45, req: ['academy'],
     desc: 'Tham nhũng giảm ngay 10 điểm và tăng chậm một nửa.' },
   { id: 'dispatchAI', branch: 'gov', name: 'AI điều độ quốc gia', cost: 70, req: ['academy'],
-    desc: 'Tự đóng lại tuyến bị cắt khi an toàn, tự hạ công suất khả dụng của nhiệt điện khi dư.' },
+    desc: 'Tuyến bị cắt tự đóng lại sau 2 phút khi dây đã nguội thay vì chờ điều độ viên 30 phút.' },
   { id: 'regionalMkt', branch: 'gov', name: 'Thị trường điện khu vực', cost: 70, req: ['dispatchAI'],
     desc: 'Giá xuất khẩu cao hơn 20%, hợp đồng được tới 600 MW.' },
 ];
@@ -48,7 +48,7 @@ export function research(G, id) {
   return true;
 }
 /** Điểm nghiên cứu mỗi ngày: từ ngân sách nghiên cứu, kỹ sư và trung tâm đào tạo. */
-export const rpPerDay = (G) => G.researchBudget * 50 + (G.engineer ? G.engineer.skill / 25 : 0) + (has(G, 'academy') ? 3 : 0);
+export const rpPerDay = (G) => (G.researchBudget * 50 + (G.engineer ? G.engineer.skill / 25 : 0) + (has(G, 'academy') ? 3 : 0)) * (G.infra?.some((s) => s.type === 'airport') ? 1.15 : 1);
 
 /** Đẩy hiệu lực công nghệ vào mô hình vật lý (lò có thể được tạo lại bởi kịch bản). */
 export function applyTech(G) {

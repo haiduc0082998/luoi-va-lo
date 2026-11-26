@@ -63,6 +63,10 @@ table.lines tr{cursor:pointer}table.lines tr.sel td{background:color-mix(in srgb
 .log time{color:var(--mute);font-variant-numeric:tabular-nums;margin-right:6px}
 .note{color:var(--mute);font-size:13px;margin:10px 0 0}
 [hidden]{display:none!important}
+.buildmenu{position:absolute;top:66px;left:10px;width:min(380px,calc(100% - 20px));max-height:calc(100% - 110px);overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;z-index:5;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.bitem{display:grid;gap:2px;text-align:left;width:100%;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;font-family:inherit}
+.bitem b{font-family:'Chakra Petch',sans-serif;font-size:15px}.bitem small{color:var(--mute);font-size:13px}.bitem span{font-weight:600;font-size:13px;color:var(--amber)}
+.bitem[aria-pressed=true]{border-color:var(--amber)}
 .wmap{width:100%;max-width:360px;display:block}.wmap path{stroke:var(--panel);stroke-width:3;fill:var(--line)}
 .wmap path.home{fill:color-mix(in srgb,var(--ink) 14%,var(--panel))}.wmap text{font:600 13px 'Be Vietnam Pro',sans-serif;fill:var(--ink);text-anchor:middle}
 .wmap text.v{writing-mode:vertical-rl}.wmap text.me{font-size:15px}

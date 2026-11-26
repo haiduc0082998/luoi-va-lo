@@ -5,6 +5,8 @@ import {
 import { createReactor, stepReactor } from './physics/reactor.js';
 import { rollEngineer, runEngineer } from './engineers.js';
 import { worldStep, createWorld } from './world.js';
+import { createWeather, weatherStep, current as weatherNow, windNow, windFarmMW, hConv, setWeather } from './weather.js';
+import { createResources, infraStep, count as infraCount } from './infra.js';
 import { buildable, PADS } from './map.js';
 import { fmt } from './util.js';
 import { news } from './news.js';
@@ -39,6 +41,7 @@ const INITIAL_NODES = [
   { id: 'port', name: 'Bến Cảng', type: 'city', x: -46, z: 58, demandBase: 260 },
   { id: 'hydro', name: 'Thủy điện Sông Lam', type: 'hydro', x: -12.8, z: -8 },
   { id: 'border', name: 'Cửa khẩu Đông (nước láng giềng)', type: 'border', x: 104, z: -14 },
+  { id: 'mine', name: 'Mỏ uranium & đất hiếm', type: 'mine', x: 34, z: -62, demandBase: 60 },
 ];
 const INITIAL_LINES = [
   { a: 'nuc', b: 'subE', kv: 500, A: 630 },
@@ -47,6 +50,7 @@ const INITIAL_LINES = [
   { a: 'subW', b: 'port', kv: 220, A: 630 },
   { a: 'subW', b: 'subE', kv: 220, A: 400 },
   { a: 'hydro', b: 'subW', kv: 220, A: 400 },
+  { a: 'mine', b: 'subE', kv: 220, A: 240 },
 ];
 for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : 9]);
 
@@ -64,7 +68,7 @@ export function createGame() {
     market: { retail: 60, contractMW: 200, exportOn: false, sanctionUntil: 0, pressureAt: 0 },
     reputation: 60, factions: { business: 55, military: 55 },
     decrees: { subsidy: false, monopoly: false, defense: false, martial: false },
-    world: createWorld(),
+    world: createWorld(), weather: createWeather(), res: createResources(), infra: [],
     tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
   };
 }
@@ -173,10 +177,16 @@ export function advance(G, dtReal) {
     applyTech(G);
     const nuc = nodeById(G, 'nuc'), coal = nodeById(G, 'coal'), hyd = nodeById(G, 'hydro');
     nuc.rated = G.reactor2 ? 2400 : 1200;
-    const cap = { nuc: nuc.state === 'ok' ? U.reduce((s, r) => s + r.Pe, 0) / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX : 0 };
+    weatherStep(G, h);
+    const W = weatherNow(G), wind = windNow(G);
+    G.Ta = W.Ta; G.windNow = wind;
+    const towers = Math.min(3, infraCount(G, 'tower'));
+    U.forEach((r) => (r.dTin = W.dTin - 3 * towers));
+    const cap = { nuc: nuc.state === 'ok' ? U.reduce((s, r) => s + r.Pe, 0) / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro : 0 };
+    for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind);
     const exportMW = G.market.exportOn ? G.market.contractMW : 0;
-    stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, ...netParams(G) }, (t, d) => netEvent(G, t, d));
-    if (has(G, 'smartsub') || has(G, 'dispatchAI')) autoReclose(G, h);
+    stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, hConv: hConv(wind), ...netParams(G) }, (t, d) => netEvent(G, t, d));
+    autoReclose(G, h);
     const offsite = !G.gridFault && nuc.state === 'ok' && connectedToOtherSource(G.net, 'nuc');
     if (offsite !== G.wasOffsite) {
       G.wasOffsite = offsite;
@@ -192,6 +202,7 @@ export function advance(G, dtReal) {
       }
     }
     buildProgress(G, h);
+    infraStep(G, h, U);
     worldStep(G, h);
     politics(G, h);
     G.t += h;
@@ -221,7 +232,7 @@ function buildProgress(G, dt) {
 
 // ---------- Hành động của người chơi ----------
 export const lineCost = (G, L, kv, A, sc = false) => L * LINE_COST_KM[kv] * Math.sqrt(A / 400) * costMul(G) * (sc ? 4 : 1);
-export const gachaCost = (G) => GACHA_COST * G.priceLevel * (has(G, 'academy') ? 0.5 : 1);
+export const gachaCost = (G) => GACHA_COST * G.priceLevel * (has(G, 'academy') ? 0.5 : 1) * (infraCount(G, 'airport') ? 0.7 : 1);
 export const subCost = (G) => SUB_COST * costMul(G);
 
 export function buildSubstation(G, x, z) {
@@ -255,12 +266,19 @@ export function skipDayNight(G) {
   news(G, target === 20 ? 'Tua nhanh tới 20:00: giờ cao điểm buổi tối, thành phố lên đèn.' : 'Tua nhanh tới 07:00 sáng.');
 }
 
-/** Tự đóng lại máy cắt sau 2 phút khi dây đã nguội (trạm thông minh / AI điều độ). */
+/** Đóng lại máy cắt khi dây đã nguội: sự cố sét tự đóng lại sau 30 giây như lưới thật;
+ *  sự cố quá tải do điều độ viên đóng lại sau 30 phút, hoặc 2 phút khi có trạm thông minh / AI điều độ. */
 function autoReclose(G, dt) {
+  const fast = has(G, 'smartsub') || has(G, 'dispatchAI');
   for (const l of G.net.lines) {
-    if (l.state !== 'tripped' && l.state !== 'collapse') { l.wait = 0; continue; }
+    if (l.state !== 'tripped' && l.state !== 'collapse') { l.wait = 0; l.transient = false; continue; }
     l.wait = (l.wait || 0) + dt;
-    if (l.wait > 120 && l.Tw < 70) { l.state = 'ok'; l.trip = 0; l.wait = 0; news(G, `Tự động đóng lại tuyến ${nodeById(G, l.a).name} – ${nodeById(G, l.b).name}.`); }
+    const delay = l.transient ? 30 : fast ? 120 : 1800;
+    if (l.wait > delay && l.Tw < 70) {
+      l.state = 'ok'; l.trip = 0; l.wait = 0;
+      news(G, `${l.transient ? 'Tự đóng lại sau sự cố sét' : fast ? 'AI điều độ đóng lại' : 'Điều độ viên đóng lại'} tuyến ${nodeById(G, l.a).name} – ${nodeById(G, l.b).name}.`);
+      l.transient = false;
+    }
   }
 }
 
@@ -308,8 +326,8 @@ export function printMoney(G) {
 
 export const SCENARIOS = [
   ['Khởi động lại lò', (G) => { G.reactor = createReactor({ wind: G.reactor.wind }); if (G.reactor2) G.reactor2 = createReactor({ wind: G.reactor.wind }); G.gridFault = false; news(G, 'Các tổ máy được nạp lại, vận hành định mức.'); }],
-  ['Nắng nóng 44 °C', (G) => { G.Ta = 44; news(G, 'Đợt nóng 44 °C: điều hoà chạy hết công suất, dây dẫn khó tản nhiệt.', 'warn'); }],
-  ['Thời tiết bình thường', (G) => { G.Ta = 30; news(G, 'Thời tiết dịu lại, 30 °C.'); }],
+  ['Nắng nóng cực đoan', (G) => setWeather(G, 'heatwave', ' (kịch bản)')],
+  ['Bão tố, sấm sét', (G) => setWeather(G, 'storm', ' (kịch bản)')],
   ['Sóng thần (mất lưới + ngập diesel)', (G) => { G.gridFault = true; units(G).forEach((r) => (r.diesel = false)); news(G, 'Sóng thần giả định: cắt điện lưới ngoài của nhà máy, máy phát diesel bị ngập.', 'bad'); }],
   ['Lò kiểu RBMK, tắt bảo vệ', (G) => { G.reactor = createReactor({ rbmk: true, rps: false }); news(G, 'Lò RBMK: hệ số rỗng dương, SCRAM chậm 20 giây, đầu thanh than chì (AZ-3). Bảo vệ tự động bị tắt.', 'warn'); }],
 ];

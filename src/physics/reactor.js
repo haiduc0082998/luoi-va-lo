@@ -23,7 +23,7 @@ export const createReactor = (o = {}) => ({
   pumps: [1, 1, 1, 1], offsite: true, diesel: true, dieselT: 0, porv: true, rps: true, rbmk: false,
   scram: false, scramFrom: null, H2: 0, cb: { cb1: true, cb2: true, cb3: true },
   // Công nghệ: boron (bỏ AZ-3), passive (làm mát thụ động 5%), recombiner (giảm hydro), eff (hiệu suất chu trình)
-  boron: false, passive: false, recombiner: false, eff: 0.33, p: 15.5, porvOpen: false, loca: false, boom: false, melt: false, dmg: false,
+  boron: false, passive: false, recombiner: false, eff: 0.33, dTin: 0, noFuel: false, p: 15.5, porvOpen: false, loca: false, boom: false, melt: false, dmg: false,
   release: 0, plume: 0, wind: Math.random() * 360, Qout: 0, Qgen: 0, rho: 0, Pe: 0, flash: 0, ...o,
 });
 
@@ -37,7 +37,8 @@ export function busPower(R) {
 }
 export const pumpPowered = (R, i) => busPower(R)[i < 2 ? 'A' : 'B'];
 export const pumpsPowered = (R) => [0, 1, 2, 3].some((i) => pumpPowered(R, i));
-export const outletTemp = (R) => T_IN + EPS * (R.T - T_IN);
+export const inletTemp = (R) => T_IN + (R.dTin ?? 0);
+export const outletTemp = (R) => inletTemp(R) + EPS * (R.T - inletTemp(R));
 
 export function stepReactor(R, dt, emit = () => {}) {
   if (R.scram) {
@@ -59,7 +60,7 @@ export function stepReactor(R, dt, emit = () => {}) {
 
   const voidTerm = R.rbmk ? 1.6 * Math.max(0, R.T - 370) : 0; // hệ số rỗng dương
   R.az = azEffect(R);
-  R.rho = 2.7 * (R.rod - 50) - (R.T - 300) + voidTerm + R.az;
+  R.rho = 2.7 * (R.rod - 50) - (R.T - 300) + voidTerm + R.az - (R.noFuel ? 300 : 0); // hết nhiên liệu: không duy trì được phản ứng
   const coreGone = R.melt || (R.rbmk && R.boom);
   R.Pf = coreGone
     ? Math.max(3e3, R.Pf * Math.exp(-3 * dt))
@@ -70,7 +71,7 @@ export function stepReactor(R, dt, emit = () => {}) {
   R.D2 += ((0.025 * R.Pf - R.D2) * dt) / 2500;
   R.Qgen = 0.935 * R.Pf + R.D1 + R.D2;
   const coolFlow = R.passive && !R.loca ? Math.max(R.flow, 0.05) : R.flow; // đối lưu tự nhiên
-  R.Qout = coolFlow * CREF * (R.T - T_IN); // = m·c·ΔT với ΔT = EPS·(T − Tin)
+  R.Qout = coolFlow * CREF * (R.T - inletTemp(R)); // = m·c·ΔT với ΔT = EPS·(T − Tin)
   R.T = Math.min(3200, Math.max(20, R.T + ((R.Qgen - R.Qout) / C_CORE) * dt));
 
   const pRaw = 15.5 + 0.045 * Math.max(0, R.T - 354);

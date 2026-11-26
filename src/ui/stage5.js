@@ -3,6 +3,8 @@ import { fmt, esc, clamp } from '../util.js';
 import { hourOfDay, nodeById } from '../game.js';
 import * as P from '../policy.js';
 import * as W from '../world.js';
+import * as I from '../infra.js';
+import { WEATHERS, WEATHER_ORDER, windFarmMW, setWeather } from '../weather.js';
 
 const $ = (id) => document.getElementById(id);
 const set = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textContent = v; };
@@ -14,7 +16,7 @@ export function createStage5(G) {
   let tab = 'market';
   root.innerHTML = `
     <div class="s5head"><h2>Điều hành quốc gia</h2>
-      <div class="seg" id="s5tabs">${[['market', 'Thị trường điện'], ['politics', 'Chính trị'], ['world', 'Ngoại giao & quân sự'], ['tech', 'Cây công nghệ']].map(([k, l]) => `<button type="button" data-v="${k}">${l}</button>`).join('')}</div></div>
+      <div class="seg" id="s5tabs">${[['market', 'Thị trường điện'], ['politics', 'Chính trị'], ['world', 'Ngoại giao & quân sự'], ['res', 'Tài nguyên & thời tiết'], ['tech', 'Cây công nghệ']].map(([k, l]) => `<button type="button" data-v="${k}">${l}</button>`).join('')}</div></div>
     <div class="s5body" data-tab="market">
       <div class="cols3">
         <div>
@@ -78,6 +80,28 @@ export function createStage5(G) {
         </div>
       </div>
     </div>
+    <div class="s5body" data-tab="res" hidden>
+      <div class="cols3">
+        <div>
+          <h3>Kho tài nguyên</h3>
+          <dl class="mini"><div><dt>Uranium<small id="uNote"></small></dt><dd id="uVal"></dd></div><div><dt>Đất hiếm<small id="reNote"></small></dt><dd id="reVal"></dd></div></dl>
+          <div class="btns sp"><button class="btn" id="exportRE" type="button"></button></div>
+          <p class="note">Mỏ là một phụ tải 60 MW trong lưới: mất điện thì ngừng khai thác. Mỗi tổ máy chạy định mức đốt khoảng 1 tấn uranium mỗi ngày; hết uranium là lò dừng.</p>
+        </div>
+        <div>
+          <h3>Cây khai thác</h3>
+          <div id="mineLv">${I.MINE_LEVELS.map((m, i) => `<div class="tech" data-m="${i}"><b>${m.name}</b><small>${m.desc}</small><button class="btn" type="button" data-m="${i}"></button></div>`).join('')}</div>
+        </div>
+        <div>
+          <h3>Thời tiết</h3>
+          <div class="seg" id="wxSeg">${WEATHER_ORDER.map((k) => `<button type="button" data-w="${k}">${WEATHERS[k].name}</button>`).join('')}</div>
+          <dl class="mini sp"><div><dt>Không khí</dt><dd id="wTa"></dd></div><div><dt>Gió (trại gió 120 MW phát)</dt><dd id="wWind"></dd></div>
+          <div><dt>Nước làm mát lò</dt><dd id="wTin"></dd></div><div><dt>Nước về hồ thủy điện</dt><dd id="wHydro"></dd></div></dl>
+          <p class="note" id="wNote"></p>
+          <h3 class="sp">Giao thông</h3><p class="note" id="trNote"></p>
+        </div>
+      </div>
+    </div>
     <div class="s5body" data-tab="tech" hidden>
       <div class="techtop">
         <div><span class="lab">Điểm nghiên cứu</span><b class="big" id="rp"></b><small id="rpRate"></small></div>
@@ -119,6 +143,9 @@ export function createStage5(G) {
   $('disband').addEventListener('click', () => W.disband(G));
   $('guards').addEventListener('click', (e) => { const b = e.target.closest('[data-g]'); if (b) W.toggleGuard(G, b.dataset.g); });
   let offersKey = '', guardsKey = '';
+  $('exportRE').addEventListener('click', () => I.exportRE(G));
+  $('mineLv').addEventListener('click', (e) => { const b = e.target.closest('button[data-m]'); if (b) I.upgradeMine(G); });
+  $('wxSeg').addEventListener('click', (e) => { const b = e.target.closest('[data-w]'); if (b) setWeather(G, b.dataset.w, ' (đổi thủ công)'); });
 
   // Biểu đồ giá giao ngay 24 giờ (thanh HTML)
   const spotEl = $('spot');
@@ -182,6 +209,28 @@ export function createStage5(G) {
         guardsKey = gk;
         $('guards').innerHTML = targets.map((n) => `<button class="btn" type="button" data-g="${n.id}" aria-pressed="${W.isGuarded(G, n.id)}">${esc(n.name)}</button>`).join('');
       }
+    }
+    if (tab === 'res') {
+      const R = G.res, L = I.MINE_LEVELS[R.mineLv - 1], mine = G.net.nodes.find((n) => n.id === 'mine');
+      const k = (mine?.frac ?? 0) * (1 + 0.25 * I.count(G, 'road'));
+      const burn = [G.reactor, G.reactor2].filter(Boolean).reduce((a, u) => a + u.Pf / 3e9, 0) * (R.mineLv >= 2 ? 0.8 : 1);
+      set('uVal', `${fmt(R.U, 1)} tấn`); set('uNote', `khai thác +${fmt(L.U * k, 1)}/ngày, lò đốt −${fmt(burn, 1)}/ngày`);
+      set('reVal', `${fmt(R.RE, 1)} tấn`); set('reNote', `khai thác +${fmt(L.RE * k, 1)}/ngày`);
+      set('exportRE', `Xuất ${I.RE_LOT} tấn đất hiếm (+${fmt(I.RE_PRICE * (I.count(G, 'port') ? 1.3 : 1) * G.priceLevel, 2)} tr)`);
+      for (const card of root.querySelectorAll('#mineLv .tech')) {
+        const i = +card.dataset.m, st = i < R.mineLv ? 'done' : i === R.mineLv ? 'ready' : 'locked';
+        card.dataset.state = st;
+        const b = card.querySelector('button'); b.disabled = st !== 'ready';
+        set2(b, st === 'done' ? 'Đã có' : `Nâng cấp · ${fmt(I.MINE_LEVELS[i].cost * G.priceLevel, 1)} tr`);
+      }
+      const w = WEATHERS[G.weather.id];
+      for (const b of $('wxSeg').children) b.setAttribute('aria-pressed', b.dataset.w === G.weather.id);
+      set('wTa', `${w.Ta} °C`); set('wWind', `${fmt(G.windNow ?? 0, 1)} m/s → ${fmt(windFarmMW(G.windNow ?? 0))} MW`);
+      const towers = Math.min(3, I.count(G, 'tower'));
+      set('wTin', `${w.dTin - 3 * towers >= 0 ? '+' : ''}${fmt(w.dTin - 3 * towers)} °C so với chuẩn${towers ? ` (đã trừ ${towers} tháp phụ)` : ''}`);
+      set('wHydro', `${fmt(w.hydro * 100)}% → ${fmt(250 * w.hydro)} MW tối đa`);
+      set('wNote', { sunny: 'Vận hành bình thường.', windy: 'Gió mạnh: trại gió phát gần định mức, dây dẫn tản nhiệt tốt hơn.', heatwave: 'Nắng nóng: nước làm mát nóng nên lò phải giảm công suất, dây khó tản nhiệt, nhu cầu điều hoà tăng. Tháp làm mát phụ giúp bù lại.', storm: 'Bão: sét đánh cắt tuyến (tự đóng lại sau 30 giây nếu rơ-le bật, cháy dây nếu rơ-le tắt), mưa làm hồ thủy điện đầy hơn. Gió trên 25 m/s thì trại gió ngắt bảo vệ.' }[G.weather.id]);
+      set('trNote', `Cao tốc ${I.count(G, 'road')}/2 · Cảng sông ${I.count(G, 'port')} · Sân bay ${I.count(G, 'airport')}. Xây ở nút “Xây dựng ▾” trên bản đồ.`);
     }
     if (tab === 'tech') {
       set('rp', fmt(G.rp, 1)); set('rpRate', `+${fmt(P.rpPerDay(G), 1)} điểm/ngày`);

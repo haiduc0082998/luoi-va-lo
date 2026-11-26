@@ -5,6 +5,8 @@ import { has, spotPrice } from '../policy.js';
 import { lineUsable, WIRE_FIRE_T, TX_FIRE_T, RHO_AL } from '../physics/network.js';
 import { RATED, C_CORE, FLOW_NOM, outletTemp, T_IN, mwDisplay, dieselRunning, busPower, gridFeeds } from '../physics/reactor.js';
 import * as World from '../world.js';
+import * as Infra from '../infra.js';
+import { current as weatherNow, cycleWeather } from '../weather.js';
 
 const $ = (id) => document.getElementById(id);
 const set = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textContent = v; };
@@ -37,9 +39,15 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   };
   const syncSegs = () => {
     for (const id of ['speed', 'tools', 'views', 'newKv', 'newA']) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v) === String($(id)._get()));
+    for (const b of $('buildMenu').querySelectorAll('[data-b]')) b.setAttribute('aria-pressed', ui.tool === `build:${b.dataset.b}`);
   };
   seg('speed', [1, 10, 60, 300, 0], (v) => (v ? `${v}×` : 'Dừng'), () => G.speed, (v) => (G.speed = v));
-  seg('tools', ['select', 'sub', 'line'], (v) => ({ select: 'Chọn', sub: 'Xây trạm', line: 'Kéo dây' }[v]), () => ui.tool, (v) => { ui.tool = v; onTool(v); });
+  seg('tools', ['select', 'build', 'line', 'sell'], (v) => ({ select: 'Chọn', build: 'Xây dựng ▾', line: 'Kéo dây', sell: 'Bán' }[v]), () => (ui.tool.startsWith('build') ? 'build' : ui.tool),
+    (v) => { if (v === 'build') { $('buildMenu').hidden = !$('buildMenu').hidden; return; } $('buildMenu').hidden = true; ui.tool = v; onTool(v); });
+  $('buildMenu').innerHTML = `<p class="lab">Năng lượng & đô thị</p>${['sub', 'wind', 'tower', 'city'].map((k) => `<button class="bitem" type="button" data-b="${k}"><b>${Infra.BUILDS[k].name}</b><small>${Infra.BUILDS[k].desc}</small><span data-cost="${k}"></span></button>`).join('')}
+    <p class="lab">Giao thông</p>${['road', 'port', 'airport'].map((k) => `<button class="bitem" type="button" data-b="${k}"><b>${Infra.BUILDS[k].name}</b><small>${Infra.BUILDS[k].desc}</small><span data-cost="${k}"></span></button>`).join('')}`;
+  $('buildMenu').addEventListener('click', (e) => { const b = e.target.closest('[data-b]'); if (!b) return; ui.tool = `build:${b.dataset.b}`; $('buildMenu').hidden = true; onTool(ui.tool); });
+  $('weatherBtn').addEventListener('click', () => cycleWeather(G));
   let view = 'overview';
   seg('views', ['overview', 'nuclear', 'capital', 'west'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây' }[v]), () => view, (v) => { view = v; onView(v); });
   seg('newKv', [10.5, 110, 220, 500, 750], kvText, () => ui.newKv, (v) => (ui.newKv = v));
@@ -70,6 +78,11 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   function inspectorHtml() {
     const s = ui.selection;
     if (!s) return `<h2>Thanh tra công trình</h2><p class="note">Bấm vào nhà máy, trạm biến áp, thành phố hoặc đường dây trên bản đồ để xem thông số và điều khiển.</p><p class="note">Dùng <b>Xây trạm</b> để đặt trạm mới lên mặt đất, <b>Kéo dây</b> để nối hai công trình: chọn điểm đầu rồi điểm cuối. Chiều dài và điện trở R = ρ·L/A được tính tự động.</p>`;
+    if (s.kind === 'infra') {
+      const it = G.infra.find((x) => x.id === s.id);
+      return `<h2>${esc(it.name)}</h2><p class="tag2">${esc(Infra.BUILDS[it.type].desc)}</p><dl>${row('Giá đã xây', '', 'xC')}${row('Hiệu lực hiện tại', '', 'xE')}</dl>
+        <div class="btns"><button class="btn danger" data-act="sellInfra" type="button">Bán (thu hồi 70%)</button></div>`;
+    }
     if (s.kind === 'line') {
       const l = Game.lineById(G, s.id), a = Game.nodeById(G, l.a), b = Game.nodeById(G, l.b);
       return `<h2>${esc(a.name)} – ${esc(b.name)}</h2>
@@ -89,7 +102,9 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     const n = Game.nodeById(G, s.id);
     const head = `<h2>${esc(n.name)}</h2><p class="tag2">${TYPE_TEXT[n.type]} · máy biến áp ${fmt(n.rated)} MVA</p>${n.type === 'border' ? '' : '<div class="btns"><button class="btn" data-act="guard" type="button"></button></div>'}`;
     const tx = row('Nhiệt độ dầu máy biến áp', 'cháy ở 150 °C', 'nT', bar('nTb', [93.7]));
-    const repair = `<div class="btns"><button class="btn" data-act="repairNode" type="button" ${n.state === 'fire' ? '' : 'hidden'}>Thay máy biến áp (${money(Game.NODE_REPAIR * G.priceLevel)})</button></div>`;
+    const repair = `<div class="btns"><button class="btn" data-act="repairNode" type="button" ${n.state === 'fire' ? '' : 'hidden'}>Thay máy biến áp (${money(Game.NODE_REPAIR * G.priceLevel)})</button>${n.sellable ? `<button class="btn danger" data-act="sellNode" type="button">Bán (thu hồi ${money(0.7 * n.cost)})</button>` : ''}</div>`;
+    if (n.type === 'wind') return `${head}<dl>${row('Đang phát', 'theo lập phương tốc độ gió, định mức 12 m/s', 'wG')}${row('Gió lúc này', 'ngắt bảo vệ khi trên 25 m/s', 'wW')}${tx}</dl>${repair}`;
+    if (n.type === 'mine') return `${head}<dl>${row('Điện cấp cho mỏ', 'mất điện thì ngừng khai thác', 'mP')}${row('Uranium trong kho', '', 'mU')}${row('Đất hiếm trong kho', '', 'mR')}${tx}</dl>${repair}`;
     if (n.type === 'city') return `${head}<dl>${row('Nhu cầu lúc này', 'theo giờ trong ngày và nhiệt độ', 'cD')}${row('Được cấp', '', 'cS')}${row('Tần số tại chỗ', '', 'cH')}${tx}</dl>${repair}`;
     if (n.type === 'hydro') return `${head}<dl>${row('Đang phát', 'chạy sau hạt nhân, trước nhiệt điện; không tốn nhiên liệu', 'hG')}${row('Công suất tối đa', '', 'hM')}${tx}</dl>${repair}`;
     if (n.type === 'border') return `${head}<dl>${row('Hợp đồng xuất khẩu', 'quản lý ở bảng Thị trường điện bên dưới', 'bC')}${row('Đang giao', '', 'bS')}${row('Giá giao ngay', 'cao nhất 19–20 giờ', 'bP')}${tx}</dl>${repair}`;
@@ -147,6 +162,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     if (act === 'unit') { ui.unit = +b.dataset.u; ui.inspKey = ''; }
     if (act === 'unit2') { Game.startUnit2(G); ui.inspKey = ''; }
     if (act === 'guard') World.toggleGuard(G, s.id);
+    if (act === 'sellNode' && Infra.sell(G, 'node', s.id)) select(null);
+    if (act === 'sellInfra' && Infra.sell(G, 'infra', s.id)) select(null);
   });
   insp.addEventListener('input', (e) => {
     const s = ui.selection;
@@ -160,10 +177,17 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
 
   function renderInspector() {
     const s = ui.selection;
-    if (s && ((s.kind === 'line' && !Game.lineById(G, s.id)) || (s.kind === 'node' && !Game.nodeById(G, s.id)))) { ui.selection = null; ui.inspKey = ''; }
-    const key = s ? `${s.kind}:${s.id}:${s.kind === 'line' ? Game.lineById(G, s.id)?.state : Game.nodeById(G, s.id)?.state}:${ui.unit}:${G.unit2.state}:${has(G, 'unit2')}` : 'none';
+    if (s && ((s.kind === 'line' && !Game.lineById(G, s.id)) || (s.kind === 'node' && !Game.nodeById(G, s.id)) || (s.kind === 'infra' && !G.infra.some((x) => x.id === s.id)))) { ui.selection = null; ui.inspKey = ''; }
+    const key = s ? `${s.kind}:${s.id}:${s.kind === 'line' ? Game.lineById(G, s.id)?.state : s.kind === 'infra' ? '' : Game.nodeById(G, s.id)?.state}:${ui.unit}:${G.unit2.state}:${has(G, 'unit2')}` : 'none';
     if (key !== ui.inspKey) { ui.inspKey = key; insp.innerHTML = inspectorHtml(); }
     if (!s) return;
+    if (s.kind === 'infra') {
+      const it = G.infra.find((x) => x.id === s.id);
+      set('xC', money(it.cost));
+      const eff = { tower: `nước làm mát −${3 * Math.min(3, Infra.count(G, 'tower'))} °C`, road: `mỏ +${25 * Infra.count(G, 'road')}% sản lượng`, port: 'đất hiếm +30% giá, phí cảng 0,3 tr/ngày', airport: 'gacha −30%, nghiên cứu +15%' }[it.type];
+      set('xE', eff);
+      return;
+    }
     if (s.kind === 'line') {
       const l = Game.lineById(G, s.id);
       set('iR', `${fmt(l.R, 2)} Ω`); set('iP', `${fmt(Math.abs(l.P))} MW`);
@@ -185,6 +209,10 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     if (n.type === 'city') {
       set('cD', `${fmt(n.demand)} MW`); set('cS', `${fmt(n.served)} MW (${fmt(n.frac * 100)}%)`);
       set('cH', n.frac > 0 ? `${fmt(n.hz, 2)} Hz` : 'mất điện');
+    } else if (n.type === 'wind') {
+      set('wG', `${fmt(n.gen)} / ${fmt(n.cap)} MW`); set('wW', `${fmt(G.windNow ?? 0, 1)} m/s`);
+    } else if (n.type === 'mine') {
+      set('mP', n.frac > 0 ? `${fmt(n.served)} MW (${fmt(n.frac * 100)}%)` : 'mất điện'); set('mU', `${fmt(G.res.U, 1)} tấn`); set('mR', `${fmt(G.res.RE, 1)} tấn`);
     } else if (n.type === 'hydro') {
       set('hG', `${fmt(n.gen)} MW`); set('hM', `${fmt(Game.HYDRO_MAX)} MW`);
     } else if (n.type === 'border') {
@@ -204,7 +232,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
       for (const k of ['cb1', 'cb2', 'cb3']) $(k)?.classList.toggle('closed', R.cb[k]);
       for (let i = 0; i < 4; i++) { live(`wP${i}`, bus[i < 2 ? 'A' : 'B']); const c = $(`pP${i}`); if (c) c.classList.toggle('run', !!(R.pumps[i] && bus[i < 2 ? 'A' : 'B'])); }
       void gridFeeds;
-      const pct = (R.Pf / RATED) * 100, m = R.flow * FLOW_NOM, dT = outletTemp(R) - T_IN;
+      const pct = (R.Pf / RATED) * 100, m = R.flow * FLOW_NOM, dT = outletTemp(R) - (T_IN + R.dTin);
       const sc = $('rScreen');
       if (sc) { sc.textContent = `${mwDisplay(R)} MW`; sc.classList.toggle('alarm', R.Pf > 1.2 * RATED || R.boom); }
       set('rodV', `${fmt(R.rod, 1)}%`);
@@ -240,6 +268,9 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     set('infl', `${fmt(G.inflation, 1)}%`); $('infl').className = G.inflation > 6 ? 'bad' : '';
     set('corr', `${fmt(G.corruption)}%`); $('corr').className = G.corruption > 35 ? 'bad' : '';
     set('rep', `${fmt(G.reputation)}%`); $('rep').className = G.reputation < 30 ? 'bad' : '';
+    { const w = weatherNow(G); set('wx', `${w.name} · ${fmt(G.windNow ?? 0, 0)} m/s`); $('wx').className = G.weather.id === 'storm' || G.weather.id === 'heatwave' ? 'bad' : ''; set('weatherBtn', `Thời tiết: ${w.name}`); }
+    set('resU', `${fmt(G.res.U, 1)} t U · ${fmt(G.res.RE, 1)} t ĐH`); $('resU').className = G.res.U < 5 ? 'bad' : '';
+    for (const el of $('buildMenu').querySelectorAll('[data-cost]')) { const k = el.dataset.cost, B = Infra.BUILDS[k]; el.textContent = `${money(Infra.buildCost(G, k))}${B.re ? ` + ${B.re} t đất hiếm` : ''}`; }
     for (const b of $('newKv').children) b.hidden = b.dataset.v === '750' && !has(G, 'uhv');
     if (ui.newKv === 750 && !has(G, 'uhv')) ui.newKv = 500;
     $('scWrap').hidden = !has(G, 'supercond'); if (!has(G, 'supercond')) ui.sc = false;
