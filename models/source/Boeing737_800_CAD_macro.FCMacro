@@ -1,0 +1,166 @@
+# Boeing 737-800 simplified parametric CAD model
+# Run this macro in FreeCAD (Macro > Macros > Execute).
+# Units: meters. This is an educational approximation, NOT OEM engineering data.
+
+import FreeCAD as App
+import Part
+import math
+from FreeCAD import Vector
+
+doc = App.newDocument("Boeing737_800_CAD")
+
+# Approximate overall dimensions (m)
+LENGTH = 39.5
+SPAN = 35.8
+BODY_DIAMETER = 3.7
+
+def add_feature(name, shape, color=(0.82, 0.85, 0.89)):
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = color
+    obj.ViewObject.LineColor = (0.12, 0.16, 0.20)
+    return obj
+
+def circle_wire(radius_x, radius_y, z):
+    # Elliptical cross-section in XY plane
+    edge = Part.Ellipse(
+        Vector(radius_x, 0, z),
+        Vector(0, radius_y, z),
+        Vector(0, 0, z)
+    ).toShape()
+    return Part.Wire([edge])
+
+# Fuselage loft: smooth changing elliptical sections
+stations = [
+    (-20.0, 0.10, 0.12),
+    (-19.2, 0.48, 0.50),
+    (-18.0, 0.92, 0.85),
+    (-16.2, 1.35, 1.20),
+    (-13.5, 1.68, 1.48),
+    (-8.0, 1.82, 1.65),
+    (0.0, 1.85, 1.68),
+    (8.0, 1.82, 1.65),
+    (12.5, 1.68, 1.52),
+    (15.0, 1.40, 1.28),
+    (17.2, 0.95, 0.90),
+    (19.0, 0.50, 0.48),
+    (19.8, 0.12, 0.12)
+]
+wires = [circle_wire(rx, ry, z) for z, rx, ry in stations]
+fuselage = Part.makeLoft(wires, True, False)
+add_feature("Fuselage_Loft", fuselage)
+
+# Wing planform; polygon in XZ plane, then extrude vertically
+def make_wing(side):
+    pts = [
+        (1.7, -3.8),
+        (17.9, 3.4),
+        (17.9, 4.5),
+        (5.3, 3.1),
+        (1.7, 3.8)
+    ]
+    pts = [Vector(x * side, -0.15, z) for x, z in pts]
+    wire = Part.makePolygon(pts + [pts[0]])
+    face = Part.Face(Part.Wire(wire.Edges))
+    solid = face.extrude(Vector(0, 0.42, 0))
+    return solid
+
+wing_l = make_wing(-1)
+wing_r = make_wing(1)
+add_feature("Main_Wings", wing_l.fuse(wing_r), (0.86, 0.88, 0.91))
+
+# Winglets, slightly canted outward
+def make_winglet(side):
+    pts = [
+        Vector(side*17.45, 0.0, 3.45),
+        Vector(side*18.05, 0.0, 3.70),
+        Vector(side*18.25, 1.65, 4.65),
+        Vector(side*17.55, 1.65, 4.35)
+    ]
+    wire = Part.makePolygon(pts + [pts[0]])
+    face = Part.Face(Part.Wire(wire.Edges))
+    return face.extrude(Vector(0, 0.18, 0))
+
+add_feature("Winglets", make_winglet(-1).fuse(make_winglet(1)), (0.08, 0.24, 0.48))
+
+# Horizontal stabilizers
+def make_tailplane(side):
+    pts = [
+        Vector(side*0.5, 0.25, 13.0),
+        Vector(side*6.0, 0.25, 15.1),
+        Vector(side*6.0, 0.25, 15.9),
+        Vector(side*1.0, 0.25, 14.9)
+    ]
+    wire = Part.makePolygon(pts + [pts[0]])
+    face = Part.Face(Part.Wire(wire.Edges))
+    return face.extrude(Vector(0, 0.28, 0))
+
+tailplanes = make_tailplane(-1).fuse(make_tailplane(1))
+add_feature("Horizontal_Tail", tailplanes)
+
+# Vertical stabilizer in YZ plane, thickness along X
+fin_pts = [
+    Vector(-0.23, 1.0, 12.8),
+    Vector(-0.23, 1.2, 18.0),
+    Vector(-0.23, 2.3, 19.5),
+    Vector(-0.23, 3.5, 14.2),
+    Vector(-0.23, 2.4, 12.8)
+]
+fin_wire = Part.makePolygon(fin_pts + [fin_pts[0]])
+fin_face = Part.Face(Part.Wire(fin_wire.Edges))
+fin = fin_face.extrude(Vector(0.46, 0, 0))
+add_feature("Vertical_Tail", fin, (0.08, 0.24, 0.48))
+
+# Engine nacelles: cylindrical approximation with tapered inlet/exhaust
+engine_shapes = []
+for side in [-1, 1]:
+    x = side * 7.4
+    main = Part.makeCylinder(1.02, 3.4, Vector(x, -1.0, -0.9), Vector(0, 0, 1))
+    inlet = Part.makeCone(0.82, 1.02, 0.65, Vector(x, -1.0, -1.55), Vector(0, 0, 1))
+    exhaust = Part.makeCone(1.02, 0.72, 0.65, Vector(x, -1.0, 2.5), Vector(0, 0, 1))
+    nacelle = main.fuse(inlet).fuse(exhaust)
+    # Pylon connecting engine to wing
+    pylon = Part.makeBox(0.75, 1.0, 2.0, Vector(x-0.375, -0.65, -0.1))
+    engine_shapes.append(nacelle.fuse(pylon))
+add_feature("Engine_Nacelles", engine_shapes[0].fuse(engine_shapes[1]), (0.45, 0.49, 0.53))
+
+# Landing gear struts and wheels
+gear_shapes = []
+for x, z, is_main in [(-1.0, 3.2, True), (1.0, 3.2, True), (0.0, -14.0, False)]:
+    strut = Part.makeCylinder(0.09, 1.65, Vector(x, -2.7, z), Vector(0, 1, 0))
+    gear_shapes.append(strut)
+    wheel_radius = 0.48 if is_main else 0.34
+    wheel_count = 2 if is_main else 1
+    for i in range(wheel_count):
+        offset = (i - (wheel_count-1)/2.0) * 0.72
+        wheel = Part.makeCylinder(
+            wheel_radius, 0.24,
+            Vector(x + offset - 0.12, -3.1, z),
+            Vector(1, 0, 0)
+        )
+        gear_shapes.append(wheel)
+add_feature("Landing_Gear", gear_shapes[0].fuse(gear_shapes[1]).fuse(gear_shapes[2]).fuse(
+    gear_shapes[3]).fuse(gear_shapes[4]).fuse(gear_shapes[5]).fuse(gear_shapes[6]),
+    (0.25, 0.28, 0.31))
+
+# Simple cabin windows as small dark solids on both sides
+window_shapes = []
+for side in [-1, 1]:
+    for i in range(28):
+        z = -13.0 + i * 0.88
+        # Small spheres positioned near the upper side of fuselage
+        window = Part.makeSphere(0.13, Vector(side*1.68, 0.55, z))
+        window_shapes.append(window)
+windows = window_shapes[0]
+for shape in window_shapes[1:]:
+    windows = windows.fuse(shape)
+add_feature("Cabin_Windows", windows, (0.04, 0.10, 0.16))
+
+doc.recompute()
+
+# Fit view and set axonometric
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()
+
+print("Boeing 737-800 approximate CAD created.")
+print("Select File > Save As to save as FCStd; export selected objects as STEP if needed.")

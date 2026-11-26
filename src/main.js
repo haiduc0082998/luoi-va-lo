@@ -6,6 +6,7 @@ import { createOrbitCamera } from './world/camera.js';
 import { pick, groundPoint, planePoint } from './world/picking.js';
 import { ORIGIN, lotFromPoint } from './world/cityview.js';
 import { createCityPanel } from './ui/citypanel.js';
+import { loadModel } from './world/kit.js';
 import * as City from './city.js';
 import { createHud } from './ui/hud.js';
 import { createStage5 } from './ui/stage5.js';
@@ -119,6 +120,7 @@ const camera = createOrbitCamera(app, canvas, {
   },
 });
 
+loadModel(app, 'b737', 'models/boeing737-800.glb');
 world = buildWorld(app);
 hud = createHud(G, {
   onTool: (t) => setTool(t),

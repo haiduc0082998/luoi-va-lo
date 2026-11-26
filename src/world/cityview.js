@@ -3,7 +3,7 @@
 import * as pc from 'playcanvas';
 import { N, SERVICES } from '../city.js';
 import { clamp } from '../util.js';
-import { col, mat, ent, beam, setBeam, lamp, seeded } from './kit.js';
+import { col, mat, ent, beam, setBeam, lamp, seeded, model } from './kit.js';
 
 export const ORIGIN = new pc.Vec3(1000, 0, 0);
 export const LOT = 14;
@@ -140,8 +140,10 @@ export function createCityView(app, M) {
   // Máy bay bay ngang thành phố
   const planes = [0, 1].map((k) => {
     const p = new pc.Entity(); root.addChild(p);
-    ent(p, 'cylinder', [0, 0, 0], [1.2, 9, 1.2], K.white).setLocalEulerAngles(90, 0, 0);
-    ent(p, 'box', [0, 0, 0.4], [11, 0.2, 2], K.white); ent(p, 'box', [0, 1.2, -4], [0.2, 2.4, 1.4], K.blue);
+    const tmp = new pc.Entity(); p.addChild(tmp);
+    ent(tmp, 'cylinder', [0, 0, 0], [1.2, 9, 1.2], K.white).setLocalEulerAngles(90, 0, 0);
+    ent(tmp, 'box', [0, 0, 0.4], [11, 0.2, 2], K.white);
+    model(p, 'b737', 0.32, 180, tmp); // Boeing 737-800 từ thư mục models
     return { p, a: k * Math.PI };
   });
 
@@ -187,7 +189,7 @@ export function createCityView(app, M) {
     }
     for (const pl of planes) {
       pl.a += dt * 0.12;
-      pl.p.setPosition(ORIGIN.x + Math.cos(pl.a) * 90, 55 + Math.sin(pl.a * 3) * 4, ORIGIN.z + Math.sin(pl.a) * 70);
+      pl.p.setPosition(ORIGIN.x + Math.cos(pl.a) * 75, 40 + Math.sin(pl.a * 3) * 4, ORIGIN.z + Math.sin(pl.a) * 55);
       pl.p.setEulerAngles(0, (-pl.a * 180) / Math.PI, -15);
     }
   }

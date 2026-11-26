@@ -4,7 +4,7 @@ import * as pc from 'playcanvas';
 import { clamp } from '../util.js';
 import { RATED } from '../physics/reactor.js';
 import { riverCenter, height, WATER_Y } from '../map.js';
-import { col, mat, ent, beam, hollowTower, lamp, seeded } from './kit.js';
+import { col, mat, ent, beam, hollowTower, lamp, seeded, model } from './kit.js';
 
 export const INFRA_PICK = { tower: 10, road: 6, port: 9, airport: 14 };
 
@@ -134,13 +134,14 @@ export function createInfra(app, world, M, emit, groundY) {
       ent(g, 'cylinder', [s.x + 12, y + 5, s.z + 10], [1.6, 10, 1.6], M.concrete);
       ent(g, 'box', [s.x + 12, y + 10.6, s.z + 10], [3.4, 1.6, 3.4], M.steelGlass);
       lamp(g, s.x - 16, y, s.z + 8, M); lamp(g, s.x + 4, y, s.z + 8, M);
+      // Boeing 737-800 (models/boeing737-800.glb, dựng từ macro FreeCAD); hình hộp tạm trong lúc tải
       const mkPlane = () => {
         const p = new pc.Entity(); g.addChild(p);
-        ent(p, 'cylinder', [0, 0, 0], [1, 7, 1], Mx.plane).setLocalEulerAngles(90, 0, 0);
-        ent(p, 'box', [0, 0, 0.3], [9, 0.18, 1.6], Mx.plane);
-        ent(p, 'box', [0, 1, -3.2], [0.18, 2, 1.2], Mx.tail);
-        ent(p, 'box', [0, 0.1, -3.2], [3.2, 0.14, 0.9], Mx.plane);
-        return p;
+        const tmp = new pc.Entity(); p.addChild(tmp);
+        ent(tmp, 'cylinder', [0, 0, 0], [1, 7, 1], Mx.plane).setLocalEulerAngles(90, 0, 0);
+        ent(tmp, 'box', [0, 0, 0.3], [9, 0.18, 1.6], Mx.plane);
+        ent(tmp, 'box', [0, 1, -3.2], [0.18, 2, 1.2], Mx.tail);
+        return model(p, 'b737', 0.26, 180, tmp);
       };
       const flyer = mkPlane(), taxi = mkPlane();
       let a = 0, t = 0;

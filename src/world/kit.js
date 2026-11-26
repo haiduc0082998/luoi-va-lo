@@ -123,3 +123,27 @@ export function lamp(parent, x, y, z, M) {
   ent(parent, 'box', [x + 0.5, y + 5, z], [1.2, 0.15, 0.2], M.metal);
   ent(parent, 'sphere', [x + 1, y + 4.85, z], [0.45, 0.3, 0.45], M.bulb, false);
 }
+
+// ---------- Mô hình 3D tải từ file (thư mục public/models) ----------
+const models = {}, waiting = [];
+/** Tải một file GLB một lần; các chỗ đã dùng `model()` trước khi tải xong sẽ được thay hình ngay khi có. */
+export function loadModel(app, name, url) {
+  app.assets.loadFromUrl(url, 'container', (err, asset) => {
+    if (err) { console.warn('Không tải được mô hình', url, err); return; }
+    models[name] = asset;
+    for (const w of waiting.filter((x) => x.name === name)) attach(w);
+  });
+}
+function attach(w) {
+  const e = models[w.name].resource.instantiateRenderEntity({ castShadows: true });
+  e.setLocalScale(w.scale, w.scale, w.scale);
+  e.setLocalEulerAngles(0, w.yaw, 0);
+  w.holder.addChild(e);
+  w.fallback?.destroy();
+}
+/** Gắn mô hình `name` vào `holder` (tỉ lệ, góc quay quanh Y). `fallback` là hình tạm hiển thị trong lúc chờ tải. */
+export function model(holder, name, scale = 1, yaw = 0, fallback = null) {
+  const w = { holder, name, scale, yaw, fallback };
+  if (models[name]) attach(w); else waiting.push(w);
+  return holder;
+}
