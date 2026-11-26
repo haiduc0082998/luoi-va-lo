@@ -2,7 +2,7 @@
 // lò phản ứng nhìn xuyên, khói/hơi, lửa, phóng xạ, ngày/đêm, con trỏ chọn và bóng ma khi xây.
 import * as pc from 'playcanvas';
 import { clamp, ramp, WIRE_RAMP, FUEL_RAMP } from '../util.js';
-import { RATED, outletTemp, DIESEL_START } from '../physics/reactor.js';
+import { RATED, outletTemp, dieselRunning } from '../physics/reactor.js';
 import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
 import { height, WATER_Y, buildable, riverCenter } from '../map.js';
@@ -34,7 +34,7 @@ export function buildWorld(app) {
     lamp: mat('#222222', { emissive: '#000000' }), corium: mat('#ff8a2a', { emissive: '#ff7a1a', ei: 2.2 }),
     plume: mat('#ff6a3d', { opacity: 0.18, emissive: '#ff4a20', ei: 0.3 }),
     flameA: mat('#000000', { emissive: '#ff5434', ei: 3 }), flameB: mat('#000000', { emissive: '#ffc04a', ei: 3 }),
-    marker: mat('#000000', { emissive: '#ffd24a', ei: 2 }),
+    marker: mat('#000000', { emissive: '#ffd24a', ei: 2 }), army: mat('#4b5a33', { gloss: 0.2 }), tent: mat('#6b7a43', { gloss: 0.1 }),
     ring: mat('#0b2230', { emissive: '#28beff', ei: 1.2 }), pulse: mat('#000000', { emissive: '#5ff5ff', ei: 3 }),
     tower: mat('#c9ccc4', { gloss: 0.2 }), towerIn: mat('#2a2e31', { gloss: 0.05 }),
     basin: mat('#1d5f86', { gloss: 0.9, emissive: '#0b3550', ei: 0.4 }),
@@ -126,6 +126,58 @@ export function buildWorld(app) {
         for (const x of [fx0, fx1]) ent(g, 'box', [x, y, (fz0 + fz1) / 2], [0.08, 0.08, fz1 - fz0], M.fence, false);
       }
       for (const [x, z] of [[fx0, fz0], [fx1, fz0], [fx1, fz1], [fx0, fz1], [7, fz1], [7, fz0]]) lamp(g, x + 0.8, 0, z + (z < 0 ? 0.8 : -0.8), M);
+      // ---------- Tổ máy số 2 (lò riêng, vật liệu riêng) + công trường ----------
+      const ux = 42, uz = 18, uy = groundY(n.x + ux, n.z + uz) - y0;
+      const u2g = new pc.Entity(); u2g.setLocalPosition(ux, uy, uz); g.addChild(u2g);
+      const M2 = { fuel: mat('#3a2418', { emissive: '#d25f23' }), ring: mat('#0b2230', { emissive: '#28beff', ei: 1.2 }),
+        core: (() => { const m = mat('#08202c', { emissive: '#28beff', ei: 1.5 }); m.cull = pc.CULLFACE_NONE; m.update(); return m; })(),
+        glass: mat('#dbe5e8', { opacity: 0.22, gloss: 0.9 }) };
+      const unit = new pc.Entity(); u2g.addChild(unit);
+      ent(unit, 'cylinder', [0, 0.3, 0], [20, 0.6, 20], M.concrete);
+      ent(unit, 'cylinder', [0, 5.6, 0], [18, 10, 18], M2.glass, false);
+      const dome2 = ent(unit, 'sphere', [0, 10.6, 0], [18, 11, 18], M2.glass, false);
+      ent(unit, 'cylinder', [0, 4.6, 0], [4.4, 8, 4.4], M.steelGlass, false);
+      const fuel2 = [];
+      for (const dx of [-0.8, 0, 0.8]) for (const dz of [-0.8, 0, 0.8]) fuel2.push(ent(unit, 'box', [dx, 3.6, dz], [0.42, 5, 0.42], M2.fuel, false));
+      const rods2 = [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]].map(([dx, dz]) => ent(unit, 'box', [dx, 8.6, dz], [0.24, 5, 0.24], M.dark, false));
+      hyperboloid(app, unit, [0, 1.1, 0], M2.core, { height: 5.2, base: 1.65, waist: 1.65, top: 1.65, rings: 2, segs: 20, shadow: false });
+      meshEnt(app, unit, new pc.TorusGeometry({ ringRadius: 9.25, tubeRadius: 0.32, segments: 40, sides: 8 }), [0, 4.2, 0], M2.ring);
+      ent(unit, 'cylinder', [5, 4.6, 0], [2.4, 7, 2.4], M.concrete);
+      const light2 = light(unit, [0, 4.5, 0], '#5cc8ff', 18);
+      const debris2 = [[3, 9, 2, 25], [-4, 8, -3, -35], [1, 12, -5, 60]].map(([dx, y, dz, r]) => {
+        const e = ent(unit, 'box', [dx, y, dz], [3, 0.5, 2], M.concrete); e.setLocalEulerAngles(r, r * 2, r / 2); e.enabled = false; return e;
+      });
+      beam(g, new pc.Vec3(n.x + ux - 6, y0 + uy + 8, n.z + uz - 4), new pc.Vec3(n.x + 24.5, y0 + 6.5, n.z + 5), 0.6, M.steam);
+      const steam2 = g.children[g.children.length - 1];
+      // Công trường: giàn giáo, cần cẩu, tường lên dần theo tiến độ
+      const site = new pc.Entity(); u2g.addChild(site);
+      const wall = ent(site, 'cylinder', [0, 0, 0], [18, 1, 18], M.concrete);
+      const V2 = (x, y, z) => new pc.Vec3(n.x + ux + x, y0 + uy + y, n.z + uz + z);
+      for (const [x, z] of [[-10, -10], [10, -10], [10, 10], [-10, 10]]) beam(site, V2(x, 0, z), V2(x, 13, z), 0.3, M.metal);
+      for (const y of [4, 8.5, 13]) { beam(site, V2(-10, y, -10), V2(10, y, -10), 0.2, M.metal); beam(site, V2(-10, y, 10), V2(10, y, 10), 0.2, M.metal); beam(site, V2(-10, y, -10), V2(-10, y, 10), 0.2, M.metal); beam(site, V2(10, y, -10), V2(10, y, 10), 0.2, M.metal); }
+      ent(site, 'box', [-14, 14, -6], [1.2, 28, 1.2], M.flag);
+      const jib = ent(site, 'box', [-6, 27.5, -6], [18, 0.8, 0.8], M.flag);
+      unit.enabled = site.enabled = false;
+      const updateU2 = (G, t) => {
+        const st = G.unit2.state, R2 = G.reactor2;
+        unit.enabled = !!R2; site.enabled = st === 'building'; steam2.enabled = !!R2;
+        if (site.enabled) { const k = Math.max(0.05, G.unit2.progress); wall.setLocalScale(18, 10 * k, 18); wall.setLocalPosition(0, 5 * k, 0); jib.setLocalEulerAngles(0, t * 12, 0); }
+        if (!R2) return;
+        rods2.forEach((r) => { const p = r.getLocalPosition(); r.setLocalPosition(p.x, 3.6 + (R2.rod / 100) * 5, p.z); });
+        col255(ramp(FUEL_RAMP, R2.T), M2.fuel.emissive); M2.fuel.emissiveIntensity = clamp((R2.T - 250) / 500, 0.15, 3); M2.fuel.update();
+        fuel2.forEach((f) => (f.enabled = !R2.melt));
+        const hk = clamp((R2.T - 380) / 400, 0, 1);
+        col255(hk > 0 ? [255, Math.round(150 - 120 * hk), 30] : [40, 190, 255], M2.ring.emissive);
+        M2.ring.emissiveIntensity = R2.melt ? 3 : 0.4 + clamp((R2.Pf / RATED) * 1.2, 0, 2.5) + hk * 2; M2.ring.update();
+        M2.core.emissive = M2.ring.emissive; M2.core.emissiveIntensity = R2.melt ? 0.2 : 0.6 + clamp((R2.Pf / RATED) * 1.5, 0, 3) + hk * 2; M2.core.update();
+        light2.light.intensity = R2.melt ? 3 : clamp((R2.Pf / RATED) * 2.5, 0, 6);
+        dome2.enabled = !R2.boom; debris2.forEach((d) => (d.enabled = R2.boom));
+        M2.glass.diffuse = R2.boom ? col('#ff8a75') : col('#dbe5e8'); M2.glass.update();
+      };
+      // Bệ phòng không (hiện khi có quân canh gác nhà máy)
+      const sam = new pc.Entity(); sam.setLocalPosition(-12, 0, -14); g.addChild(sam);
+      ent(sam, 'box', [0, 0.8, 0], [4, 1.6, 2.6], M.army);
+      const tube = ent(sam, 'box', [0, 2.6, 0], [1.2, 1.2, 4.6], M.army); tube.setLocalEulerAngles(-35, 0, 0);
       let fanRot = 0;
       // Vòng phát sáng Cherenkov quanh vỏ lò: xanh khi ổn định, cam rồi đỏ khi quá nhiệt
       meshEnt(app, g, new pc.TorusGeometry({ ringRadius: 9.25, tubeRadius: 0.32, segments: 40, sides: 8 }), [0, 4.2, 0], M.ring);
@@ -140,6 +192,7 @@ export function buildWorld(app) {
       let pumpRot = 0, acc = 0;
       return (G, dt, t) => {
         const R = G.reactor;
+        updateU2(G, t); sam.enabled = G.world.guards.includes(n.id);
         rods.forEach((r) => { const p = r.getLocalPosition(); r.setLocalPosition(p.x, 3.6 + (R.rod / 100) * 5, p.z); });
         col255(ramp(FUEL_RAMP, R.T), M.fuel.emissive); M.fuel.emissiveIntensity = clamp((R.T - 250) / 500, 0.15, 3); M.fuel.update();
         fuel.forEach((f) => (f.enabled = !R.melt)); corium.enabled = R.melt;
@@ -151,25 +204,26 @@ export function buildWorld(app) {
         pumpRot += R.flow * 720 * dt; pump.setLocalEulerAngles(0, pumpRot % 360, 0);
         fanRot += (200 + clamp(R.T - 280, 0, 400) * 3) * dt; fans.forEach((f, i) => f.setLocalEulerAngles(0, (fanRot + i * 40) % 360, 0));
         M.steam.emissive = col('#f2b13a'); M.steam.emissiveIntensity = R.Pe > 0 ? 0.6 : 0; M.steam.update();
-        M.lamp.emissive = col(!R.diesel ? '#ff5434' : !R.offsite && R.dieselT >= DIESEL_START ? '#36b2ff' : !R.offsite ? '#f2b13a' : '#202020');
+        M.lamp.emissive = col(!R.diesel ? '#ff5434' : dieselRunning(R) ? '#36b2ff' : !R.offsite ? '#f2b13a' : '#202020');
         M.lamp.emissiveIntensity = 2; M.lamp.update();
         dome.enabled = !R.boom; debris.forEach((d) => (d.enabled = R.boom));
         M.glass.diffuse = R.boom ? col('#ff8a75') : col('#dbe5e8'); M.glass.update();
         blaze.set(R.boom && R.T > 600, t);
         R.flash = Math.max(0, R.flash - dt * 0.8); flash.light.intensity = R.flash * 10;
-        plume.enabled = R.release > 0;
+        const rel = Math.max(R.release, G.reactor2?.release ?? 0), pl = Math.max(R.plume, G.reactor2?.plume ?? 0);
+        plume.enabled = rel > 0;
         if (plume.enabled) {
-          const len = 10 + R.plume * 90, w = (R.wind * Math.PI) / 180;
+          const len = 10 + pl * 90, w = (R.wind * Math.PI) / 180;
           plume.setLocalPosition(n.x + Math.sin(w) * len, y0 + 16, n.z - Math.cos(w) * len);
           plume.setLocalEulerAngles(0, -R.wind, 0);
-          plume.setLocalScale(10 + R.plume * 30, 5 + R.plume * 5, len * 2);
+          plume.setLocalScale(10 + pl * 30, 5 + pl * 5, len * 2);
         }
         const hotK = clamp((R.T - 380) / 400, 0, 1);
         col255(hotK > 0 ? [255, Math.round(150 - 120 * hotK), 30] : [40, 190, 255], M.ring.emissive);
         M.ring.emissiveIntensity = R.melt ? 3 : 0.4 + clamp((R.Pf / RATED) * 1.2, 0, 2.5) + hotK * 2;
         M.ring.update();
         M.core.emissive = M.ring.emissive; M.core.emissiveIntensity = R.melt ? 0.2 : 0.6 + clamp((R.Pf / RATED) * 1.5, 0, 3) + hotK * 2; M.core.update();
-        acc += dt * 5 * clamp(R.Pe / (0.33 * RATED), 0, 1);
+        acc += dt * 5 * clamp((R.Pe + (G.reactor2?.Pe ?? 0)) / (0.33 * RATED), 0, 2);
         while (acc >= 1) { acc -= 1; const [x, y, z] = towers[Math.random() < 0.5 ? 0 : 1]; emit(x, y + 20, z, '#f3f5f4', 5, 9); }
       };
     },
@@ -384,11 +438,24 @@ export function buildWorld(app) {
 
   // ---------- Đồng bộ với dữ liệu lưới ----------
   const nodeViews = new Map(), lineViews = new Map();
+  // Lều lính gác + xe quân sự cạnh công trình được canh gác
+  const makeGuard = (n) => {
+    const r = PICK_RADIUS[n.type] * 0.7 + 3, x = n.x - r, z = n.z + r, y = groundY(x, z);
+    const e = new pc.Entity(); e.setLocalPosition(x, y, z); world.addChild(e);
+    ent(e, 'cone', [0, 1.2, 0], [3.2, 2.4, 3.2], M.tent);
+    ent(e, 'box', [3, 0.9, 0.5], [2.2, 1.4, 4], M.army);
+    ent(e, 'cylinder', [-2, 2.5, 1], [0.1, 5, 0.1], M.metal);
+    ent(e, 'box', [-2, 4.6, 1.6], [0.05, 0.9, 1.3], M.flag, false);
+    e.enabled = false;
+    return e;
+  };
+  const strikeLight = light(world, [0, -50, 0], '#ffb070', 70);
+  let strikeT = 0, seenStrikes = 0;
   function sync(G) {
     for (const n of G.net.nodes) {
       if (nodeViews.has(n.id)) continue;
       const g = new pc.Entity(`node-${n.id}`); world.addChild(g);
-      nodeViews.set(n.id, { g, update: builders[n.type](n, g), node: n });
+      nodeViews.set(n.id, { g, update: builders[n.type](n, g), node: n, guard: n.type === 'border' ? null : makeGuard(n) });
     }
     for (const [id, v] of lineViews) if (!G.net.lines.some((l) => l.id === id)) { v.g.destroy(); lineViews.delete(id); }
     for (const l of G.net.lines) {
@@ -442,7 +509,15 @@ export function buildWorld(app) {
     camera.camera.clearColor = sky; app.scene.fog.color = sky;
 
     M.bulb.emissiveIntensity = clamp((0.55 - day) * 5, 0, 2.5); M.bulb.update();
-    for (const v of nodeViews.values()) v.update(G, dt, time, day);
+    for (const v of nodeViews.values()) { v.update(G, dt, time, day); if (v.guard) v.guard.enabled = G.world.guards.includes(v.node.id); }
+    // Tên lửa / phá hoại: chớp sáng tại điểm bị đánh
+    const fx = G.world.strikeFx;
+    if (fx.length > seenStrikes) {
+      const n = nodeById(G, fx[fx.length - 1].id);
+      seenStrikes = fx.length;
+      if (n) { strikeLight.setPosition(n.x, groundY(n.x, n.z) + 10, n.z); strikeT = 1; for (let i = 0; i < 6; i++) emit(n.x, groundY(n.x, n.z) + 2, n.z, '#3b3b3b', 5, 10); }
+    }
+    strikeT = Math.max(0, strikeT - dt * 0.6); strikeLight.light.intensity = strikeT * 12;
     for (const v of lineViews.values()) v.update(time, selection?.kind === 'line' && selection.id === v.line.id, dt);
     updatePuffs(dt);
 

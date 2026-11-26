@@ -21,13 +21,22 @@ const CREF = FLOW_NOM * CP_WATER * EPS;
 export const createReactor = (o = {}) => ({
   rod: 70, rodCmd: 70, Pf: RATED, D1: 0.04 * RATED, D2: 0.025 * RATED, T: 354, flow: 1,
   pumps: [1, 1, 1, 1], offsite: true, diesel: true, dieselT: 0, porv: true, rps: true, rbmk: false,
-  scram: false, scramFrom: null, H2: 0,
+  scram: false, scramFrom: null, H2: 0, cb: { cb1: true, cb2: true, cb3: true },
   // Công nghệ: boron (bỏ AZ-3), passive (làm mát thụ động 5%), recombiner (giảm hydro), eff (hiệu suất chu trình)
   boron: false, passive: false, recombiner: false, eff: 0.33, p: 15.5, porvOpen: false, loca: false, boom: false, melt: false, dmg: false,
   release: 0, plume: 0, wind: Math.random() * 360, Qout: 0, Qgen: 0, rho: 0, Pe: 0, flash: 0, ...o,
 });
 
-export const pumpsPowered = (R) => R.offsite || (R.diesel && R.dieselT >= DIESEL_START);
+// Lớp 3 – hệ thống điện tự dùng: lưới ngoài → CB1 → thanh cái A (bơm 1, 2);
+// diesel → CB2 → thanh cái B (bơm 3, 4); CB3 nối liên lạc A–B.
+export const gridFeeds = (R) => R.offsite && R.cb.cb1;  // diesel tự khởi động khi thanh cái A mất nguồn lưới
+export const dieselRunning = (R) => !gridFeeds(R) && R.diesel && R.dieselT >= DIESEL_START;
+export function busPower(R) {
+  const cb = R.cb, srcA = R.offsite && cb.cb1, srcB = dieselRunning(R) && cb.cb2;
+  return { A: srcA || (srcB && cb.cb3), B: srcB || (srcA && cb.cb3) };
+}
+export const pumpPowered = (R, i) => busPower(R)[i < 2 ? 'A' : 'B'];
+export const pumpsPowered = (R) => [0, 1, 2, 3].some((i) => pumpPowered(R, i));
 export const outletTemp = (R) => T_IN + EPS * (R.T - T_IN);
 
 export function stepReactor(R, dt, emit = () => {}) {
@@ -38,13 +47,14 @@ export function stepReactor(R, dt, emit = () => {}) {
   const rate = R.scram ? (R.rbmk && !R.boron ? RBMK_ROD_SPEED : 35) : 6; // %/s
   R.rod += Math.max(-rate * dt, Math.min(rate * dt, R.rodCmd - R.rod));
 
-  if (R.offsite) R.dieselT = 0;
+  if (gridFeeds(R)) R.dieselT = 0;
   else if (R.diesel) {
     const was = R.dieselT >= DIESEL_START;
     R.dieselT += dt;
     if (!was && R.dieselT >= DIESEL_START) emit('dieselOn');
   }
-  const target = R.loca ? 0 : pumpsPowered(R) ? R.pumps.reduce((a, b) => a + b, 0) * 0.25 : 0;
+  const bus = busPower(R);
+  const target = R.loca ? 0 : R.pumps.reduce((s, p, i) => s + (p && bus[i < 2 ? 'A' : 'B'] ? 0.25 : 0), 0);
   R.flow += ((target - R.flow) * dt) / (target > R.flow ? 5 : 15); // khởi động 5 s, quán tính dừng 15 s
 
   const voidTerm = R.rbmk ? 1.6 * Math.max(0, R.T - 370) : 0; // hệ số rỗng dương

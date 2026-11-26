@@ -52,3 +52,14 @@ test('AZ-3: SCRAM lò RBMK khi đã nóng ~390 °C thì đầu than chì làm c�
   }
   assert.ok(ev.includes('promptExplosion'));
 });
+
+test('Lớp 3: mở CB1 và CB3 thì thanh cái A mất điện, chỉ còn 2 bơm qua diesel', () => {
+  const R = createReactor({ cb: { cb1: false, cb2: true, cb3: false } });
+  R.offsite = true;
+  run(stepReactor, R, 120);
+  assert.ok(Math.abs(R.flow - 0.5) < 0.05, `${R.flow}`); // CB1 mở: diesel tự chạy, chỉ cấp thanh cái B
+  const R2 = createReactor({ cb: { cb1: true, cb2: true, cb3: false } });
+  R2.offsite = false;
+  run(stepReactor, R2, 120);
+  assert.ok(Math.abs(R2.flow - 0.5) < 0.05, `${R2.flow}`); // diesel chỉ cấp thanh cái B
+});

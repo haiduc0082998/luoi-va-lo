@@ -1,5 +1,5 @@
 // Gacha kỹ sư: thuê người tự vận hành lò. Tham nhũng cao thì dễ "trúng" kỹ sư rởm.
-import { RATED, FLOW_NOM, CP_WATER, EPS, T_IN } from './physics/reactor.js';
+import { RATED, FLOW_NOM, CP_WATER, EPS, T_IN, pumpsPowered as anyPump } from './physics/reactor.js';
 
 export const ENGINEERS = {
   fake: { tier: 'fake', name: 'Kỹ sư “con ông cháu cha”', skill: 20, salary: 0.05,
@@ -31,7 +31,7 @@ export function rodForPower(R, P) {
  */
 export function runEngineer(E, R, wantMWe, rnd = Math.random, emit = () => {}) {
   if (!E || R.melt || (R.rbmk && R.boom)) return;
-  const pumpsPowered = R.offsite || (R.diesel && R.dieselT >= 15);
+  const pumpsPowered = anyPump(R);
 
   if (E.tier === 'fake') {
     if (!R.scram) R.rodCmd = Math.max(0, Math.min(100, R.rodCmd + (rnd() - 0.45) * 4));
@@ -47,6 +47,10 @@ export function runEngineer(E, R, wantMWe, rnd = Math.random, emit = () => {}) {
   }
 
   const legend = E.tier === 'legend';
+  if (legend && (!R.cb.cb1 || !R.cb.cb2 || !R.cb.cb3)) {
+    R.cb = { cb1: true, cb2: true, cb3: true };
+    emit(`${E.name} đóng lại các máy cắt tự dùng CB1–CB3.`);
+  }
   if (legend && pumpsPowered) {
     R.pumps.forEach((p, i) => {
       if (!p) { R.pumps[i] = 1; emit(`${E.name} cho chạy lại bơm ${i + 1}.`); }

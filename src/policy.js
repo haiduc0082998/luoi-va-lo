@@ -1,6 +1,7 @@
 // Giai đoạn 5: thị trường điện, chính trị (phe phái, sắc lệnh), cây công nghệ, điều kiện thua.
 import { news } from './news.js';
 import { fmt } from './util.js';
+import { shiftRelation } from './world.js';
 
 // ---------- Cây công nghệ ----------
 export const TECHS = [
@@ -11,6 +12,8 @@ export const TECHS = [
     desc: 'Hydro tích tụ chậm 5 lần khi lõi quá nóng, khó nổ nhà lò hơn.' },
   { id: 'passive', branch: 'nuclear', name: 'Làm mát thụ động', cost: 55, req: ['boron'],
     desc: 'Nước tự đối lưu 5% lưu lượng khi mất bơm: đủ tản nhiệt phân rã, chống kịch bản Fukushima.' },
+  { id: 'unit2', branch: 'nuclear', name: 'Thiết kế tổ máy số 2', cost: 60, req: ['passive'],
+    desc: 'Cho phép xây lò 3 000 MWt thứ hai cạnh tổ máy 1 (30 triệu USD, 3 ngày). Nút xây ở bảng nhà máy hạt nhân.' },
   { id: 'gen3', branch: 'nuclear', name: 'Lò thế hệ III+', cost: 100, req: ['recombiner', 'passive'],
     desc: 'Hiệu suất chu trình hơi 33% → 37%: thêm khoảng 120 MW điện từ cùng một lõi.' },
   // Truyền tải
@@ -49,10 +52,13 @@ export const rpPerDay = (G) => G.researchBudget * 50 + (G.engineer ? G.engineer.
 
 /** Đẩy hiệu lực công nghệ vào mô hình vật lý (lò có thể được tạo lại bởi kịch bản). */
 export function applyTech(G) {
-  const R = G.reactor;
-  R.boron = has(G, 'boron'); R.recombiner = has(G, 'recombiner'); R.passive = has(G, 'passive');
-  R.eff = has(G, 'gen3') ? 0.37 : 0.33;
+  for (const R of [G.reactor, G.reactor2]) {
+    if (!R) continue;
+    R.boron = has(G, 'boron'); R.recombiner = has(G, 'recombiner'); R.passive = has(G, 'passive');
+    R.eff = has(G, 'gen3') ? 0.37 : 0.33;
+  }
 }
+const anyRelease = (G) => Math.max(G.reactor.release, G.reactor2?.release ?? 0);
 export const netParams = (G) => ({ fireT: has(G, 'accc') ? 350 : 250, ratedMul: has(G, 'smartsub') ? 1.5 : 1 });
 
 // ---------- Thị trường ----------
@@ -80,6 +86,7 @@ export function energyWeapon(G) {
   G.market.exportOn = false; G.reputation = Math.max(0, G.reputation - 15);
   G.factions.military = Math.min(100, G.factions.military + 8);
   G.market.pressureAt = G.t + 86400;
+  if (G.world) { shiftRelation(G, 'east', -30); shiftRelation(G, 'north', -8); shiftRelation(G, 'south', -8); }
   news(G, 'Cắt điện xuất khẩu không báo trước để gây sức ép ngoại giao! Uy tín quốc tế lao dốc, quân đội hài lòng.', 'warn');
 }
 
@@ -92,7 +99,7 @@ export const DECREES = [
 ];
 export function toggleDecree(G, id) {
   const on = !G.decrees[id];
-  if (id === 'martial' && on && !(G.protest || G.reactor.release > 0)) {
+  if (id === 'martial' && on && !(G.protest || anyRelease(G) > 0 || G.world?.war)) {
     news(G, 'Không có căn cứ ban hành thiết quân luật: chưa có biểu tình hay sự cố phóng xạ.', 'warn'); return;
   }
   G.decrees[id] = on;
@@ -109,7 +116,7 @@ export function politicsStep(G, dt, { secFrac, portFrac, profitPerH, exportFrac 
     - 2.5 * (1 - portFrac) - (D.monopoly ? 0.8 : 0) - (D.subsidy ? 0.4 : 0) - (D.martial ? 1 : 0)
     - (G.corruption > 40 ? 0.4 : 0) - (M.sanctionUntil > G.t ? 0.6 : 0);
   // Quân đội: an ninh năng lượng, quốc phòng, uy tín
-  let m = (D.defense ? 1.2 : -0.2) + (D.martial ? 0.6 : 0) - 3 * (1 - secFrac) - (G.reactor.release > 0 ? 1 : 0)
+  let m = (D.defense ? 1.2 : -0.2) + Math.min(1.2, (G.world?.troops ?? 0) * 0.2) - 0.4 + (D.martial ? 0.6 : 0) - 3 * (1 - secFrac) - (anyRelease(G) > 0 ? 1 : 0) + (G.world?.war ? -0.5 + Math.min(1.5, G.world.troops * 0.3) : 0)
     - (G.reputation < 25 ? 0.3 : 0);
   F.business = clamp(F.business + (b + (50 - F.business) * 0.02) * h);
   F.military = clamp(F.military + (m + (50 - F.military) * 0.02) * h);

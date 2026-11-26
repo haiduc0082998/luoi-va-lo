@@ -63,6 +63,21 @@ table.lines tr{cursor:pointer}table.lines tr.sel td{background:color-mix(in srgb
 .log time{color:var(--mute);font-variant-numeric:tabular-nums;margin-right:6px}
 .note{color:var(--mute);font-size:13px;margin:10px 0 0}
 [hidden]{display:none!important}
+.wmap{width:100%;max-width:360px;display:block}.wmap path{stroke:var(--panel);stroke-width:3;fill:var(--line)}
+.wmap path.home{fill:color-mix(in srgb,var(--ink) 14%,var(--panel))}.wmap text{font:600 13px 'Be Vietnam Pro',sans-serif;fill:var(--ink);text-anchor:middle}
+.wmap text.v{writing-mode:vertical-rl}.wmap text.me{font-size:15px}
+.country{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:grid;gap:5px}
+.country b{display:flex;justify-content:space-between;gap:8px;font-family:'Chakra Petch',sans-serif;font-size:15px}.country b span{color:var(--mute);font-weight:600;white-space:nowrap}
+.country small{color:var(--mute);font-size:13px}
+.offer{border:1px solid var(--amber);border-radius:10px;padding:8px 12px;margin-bottom:8px}.offer p{margin:0 0 6px;font-size:14px}
+.guards{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.sld{width:100%;max-width:420px;display:block;margin:4px 0 8px}
+.sld path{stroke:var(--line);stroke-width:3;fill:none}.sld path.bus{stroke-width:6}.sld path.live{stroke:var(--amber)}
+.sld .src{fill:none;stroke:var(--mute);stroke-width:1.5}.sld text{font:600 12px 'Be Vietnam Pro',sans-serif;fill:var(--ink);text-anchor:middle}
+.sld text.sm{font-size:11px;fill:var(--mute)}.sld text.pt{font-size:11px}
+.sld .cb{cursor:pointer}.sld .cb rect{fill:var(--panel);stroke:var(--hot);stroke-width:2.5}.sld .cb rect.closed{fill:var(--ink);stroke:var(--ink)}
+.sld circle{fill:var(--panel);stroke:var(--line);stroke-width:2.5}.sld circle.run{stroke:var(--cool);fill:color-mix(in srgb,var(--cool) 25%,var(--panel))}
+.proj{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px}.proj small{color:var(--mute);font-size:13px}.proj .btn{justify-self:start}
 .s5{margin-top:16px}.s5head{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;margin-bottom:12px}
 h3{font-size:16px;margin:0 0 8px}
 .cols3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.span2{grid-column:span 2}

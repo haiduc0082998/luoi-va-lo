@@ -4,9 +4,11 @@ import {
 } from './physics/network.js';
 import { createReactor, stepReactor } from './physics/reactor.js';
 import { rollEngineer, runEngineer } from './engineers.js';
+import { worldStep, createWorld } from './world.js';
 import { buildable, PADS } from './map.js';
 import { fmt } from './util.js';
 import { news } from './news.js';
+const newsRaw = news;
 import { applyTech, netParams, politicsStep, spotPrice, retailEffective, rpPerDay, has } from './policy.js';
 
 export const START_HOUR = 8;
@@ -55,12 +57,14 @@ export function createGame() {
   return {
     t: 0, speed: 60, approval: 62, budget: 20, inflation: 2, corruption: 15, priceLevel: 1, Ta: 30,
     news: [], listeners: new Set(), protest: false, newsAcc: 0, engAcc: 0,
-    net: { nodes, lines }, reactor: createReactor(), coalMax: COAL_MAX, gridFault: false, wasOffsite: true,
+    net: { nodes, lines }, reactor: createReactor(), reactor2: null, unit2: { state: 'none', progress: 0 },
+    coalMax: COAL_MAX, gridFault: false, wasOffsite: true,
     engineer: null, engAuto: true, version: 1, subCount: 2,
     // Giai đoạn 5
     market: { retail: 60, contractMW: 200, exportOn: false, sanctionUntil: 0, pressureAt: 0 },
     reputation: 60, factions: { business: 55, military: 55 },
     decrees: { subsidy: false, monopoly: false, defense: false, martial: false },
+    world: createWorld(),
     tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
   };
 }
@@ -98,8 +102,14 @@ function netEvent(G, type, d) {
     case 'txFire': G.approval -= 6; return news(G, `Máy biến áp tại ${d.node.name} quá tải, dầu cách điện bốc cháy.`, 'bad');
   }
 }
-function reactorEvent(G, type) {
-  const R = G.reactor;
+/** Các tổ máy đang tồn tại (tổ 1 luôn có, tổ 2 khi đã xây xong). */
+export const units = (G) => (G.reactor2 ? [G.reactor, G.reactor2] : [G.reactor]);
+export const maxRelease = (G) => Math.max(...units(G).map((r) => r.release));
+
+function reactorEvent(G, type, unit = 1) {
+  const R = unit === 2 ? G.reactor2 : G.reactor;
+  const pre = G.reactor2 ? `Tổ máy ${unit}: ` : '';
+  const news = (G2, text, lvl) => newsRaw(G2, pre + text, lvl);
   switch (type) {
     case 'dieselOn': return news(G, 'Máy phát diesel dự phòng đã chạy, cấp điện cho bơm.');
     case 'scram': return news(G, 'SCRAM tự động: thanh điều khiển rơi vào lõi.', 'warn');
@@ -119,14 +129,14 @@ function nuclearWant(G) {
 }
 
 function politics(G, dt) {
-  const h = dt / 3600, day = dt / 86400, S = G.net.summary, R = G.reactor;
+  const h = dt / 3600, day = dt / 86400;
   const border = nodeById(G, 'border'), port = nodeById(G, 'port');
   const domestic = G.net.nodes.filter((n) => n.type === 'city').reduce((s2, n) => s2 + n.served, 0);
   const coalGen = nodeById(G, 'coal').gen, sanction = G.market.sanctionUntil > G.t;
   const b0 = G.budget;
   G.budget += (domestic * retailEffective(G) * (G.decrees.monopoly ? 1.15 : 1) * G.priceLevel * h * (1 - G.corruption / 200)) / 1e6;
   G.budget += (border.served * spotPrice(G, hourOfDay(G)) * G.priceLevel * h) / 1e6;
-  G.budget -= (coalGen * COAL_USD_MWH * (sanction ? 1.3 : 1) * G.priceLevel * h) / 1e6;
+  G.budget -= (coalGen * COAL_USD_MWH * (sanction ? 1.3 : 1) * (G.world.coalDealUntil > G.t ? 0.75 : 1) * G.priceLevel * h) / 1e6;
   if (G.engineer) G.budget -= G.engineer.salary * G.priceLevel * day;
   G.budget -= (G.researchBudget + (G.decrees.defense ? 0.25 : 0)) * G.priceLevel * day;
   G.rp += rpPerDay(G) * day;
@@ -139,7 +149,7 @@ function politics(G, dt) {
   G.corruption = Math.min(80, G.corruption + 0.5 * day * (has(G, 'audit') ? 0.5 : 1) * (G.decrees.monopoly ? 2 : 1));
 
   let dA = fw > 0.999 ? (G.approval < 85 ? 2 : 0) : -14 * (1 - fw);
-  dA -= R.release * 25;
+  dA -= maxRelease(G) * 25;
   if (G.inflation > 6) dA -= (G.inflation - 6) * 0.4;
   if (G.corruption > 35) dA -= (G.corruption - 35) * 0.05;
   G.approval = Math.max(0, Math.min(100, G.approval + dA * h));
@@ -157,30 +167,55 @@ function politics(G, dt) {
 export function advance(G, dtReal) {
   if (G.over) return;
   const total = dtReal * G.speed, n = Math.ceil(total / 0.05);
-  const R0 = G.reactor;
-  void R0;
   for (let i = 0; i < n; i++) {
     const h = total / n;
-    const R = G.reactor;
+    const U = units(G);
     applyTech(G);
     const nuc = nodeById(G, 'nuc'), coal = nodeById(G, 'coal'), hyd = nodeById(G, 'hydro');
-    const cap = { nuc: nuc.state === 'ok' ? R.Pe / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX : 0 };
+    nuc.rated = G.reactor2 ? 2400 : 1200;
+    const cap = { nuc: nuc.state === 'ok' ? U.reduce((s, r) => s + r.Pe, 0) / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX : 0 };
     const exportMW = G.market.exportOn ? G.market.contractMW : 0;
     stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, ...netParams(G) }, (t, d) => netEvent(G, t, d));
     if (has(G, 'smartsub') || has(G, 'dispatchAI')) autoReclose(G, h);
-    R.offsite = !G.gridFault && nuc.state === 'ok' && connectedToOtherSource(G.net, 'nuc');
-    if (R.offsite !== G.wasOffsite) {
-      G.wasOffsite = R.offsite;
-      news(G, R.offsite ? 'Nhà máy hạt nhân có lại điện lưới ngoài.' : 'Nhà máy hạt nhân mất điện lưới ngoài! Bơm cần máy phát diesel.', R.offsite ? '' : 'bad');
+    const offsite = !G.gridFault && nuc.state === 'ok' && connectedToOtherSource(G.net, 'nuc');
+    if (offsite !== G.wasOffsite) {
+      G.wasOffsite = offsite;
+      news(G, offsite ? 'Nhà máy hạt nhân có lại điện lưới ngoài.' : 'Nhà máy hạt nhân mất điện lưới ngoài! Bơm cần máy phát diesel.', offsite ? '' : 'bad');
     }
-    stepReactor(R, h, (t) => reactorEvent(G, t));
-    if (G.over) { news(G, G.over, 'bad'); break; }
+    U.forEach((R, k) => { R.offsite = offsite; stepReactor(R, h, (t) => reactorEvent(G, t, k + 1)); });
     if (G.engineer && G.engAuto) {
       G.engAcc += h;
-      if (G.engAcc >= 1) { G.engAcc = 0; runEngineer(G.engineer, R, nuclearWant(G), Math.random, (txt, lvl) => news(G, txt, lvl)); }
+      if (G.engAcc >= 1) {
+        G.engAcc = 0;
+        const want = nuclearWant(G) / U.length;
+        U.forEach((R, k) => runEngineer(G.engineer, R, want, Math.random, (txt, lvl) => news(G, (U.length > 1 ? `Tổ máy ${k + 1}: ` : '') + txt, lvl)));
+      }
     }
+    buildProgress(G, h);
+    worldStep(G, h);
     politics(G, h);
     G.t += h;
+    if (G.over) { news(G, G.over, 'bad'); break; }
+  }
+}
+
+// ---------- Tổ máy số 2 ----------
+export const UNIT2_COST = 30, UNIT2_DAYS = 3;
+export const unit2Cost = (G) => UNIT2_COST * costMul(G);
+export function startUnit2(G) {
+  if (!has(G, 'unit2') || G.unit2.state !== 'none') return;
+  if (!spend(G, unit2Cost(G), 'tổ máy số 2')) return;
+  G.unit2 = { state: 'building', progress: 0 };
+  news(G, `Khởi công tổ máy số 2 (−${fmt(unit2Cost(G), 1)} triệu USD). Dự kiến hoàn thành sau ${UNIT2_DAYS} ngày.`);
+}
+function buildProgress(G, dt) {
+  if (G.unit2.state !== 'building') return;
+  G.unit2.progress = Math.min(1, G.unit2.progress + dt / (UNIT2_DAYS * 86400));
+  if (G.unit2.progress >= 1) {
+    G.unit2.state = 'done';
+    G.reactor2 = createReactor({ wind: G.reactor.wind });
+    G.version++;
+    news(G, 'Tổ máy số 2 hoà lưới: thêm khoảng 1 000 MW điện. Máy biến áp nhà máy nâng lên 2 400 MVA.');
   }
 }
 
@@ -272,9 +307,9 @@ export function printMoney(G) {
 }
 
 export const SCENARIOS = [
-  ['Khởi động lại lò', (G) => { G.reactor = createReactor(); G.gridFault = false; news(G, 'Lò phản ứng được nạp lại, vận hành định mức.'); }],
+  ['Khởi động lại lò', (G) => { G.reactor = createReactor({ wind: G.reactor.wind }); if (G.reactor2) G.reactor2 = createReactor({ wind: G.reactor.wind }); G.gridFault = false; news(G, 'Các tổ máy được nạp lại, vận hành định mức.'); }],
   ['Nắng nóng 44 °C', (G) => { G.Ta = 44; news(G, 'Đợt nóng 44 °C: điều hoà chạy hết công suất, dây dẫn khó tản nhiệt.', 'warn'); }],
   ['Thời tiết bình thường', (G) => { G.Ta = 30; news(G, 'Thời tiết dịu lại, 30 °C.'); }],
-  ['Sóng thần (mất lưới + ngập diesel)', (G) => { G.gridFault = true; G.reactor.diesel = false; news(G, 'Sóng thần giả định: cắt điện lưới ngoài của nhà máy, máy phát diesel bị ngập.', 'bad'); }],
+  ['Sóng thần (mất lưới + ngập diesel)', (G) => { G.gridFault = true; units(G).forEach((r) => (r.diesel = false)); news(G, 'Sóng thần giả định: cắt điện lưới ngoài của nhà máy, máy phát diesel bị ngập.', 'bad'); }],
   ['Lò kiểu RBMK, tắt bảo vệ', (G) => { G.reactor = createReactor({ rbmk: true, rps: false }); news(G, 'Lò RBMK: hệ số rỗng dương, SCRAM chậm 20 giây, đầu thanh than chì (AZ-3). Bảo vệ tự động bị tắt.', 'warn'); }],
 ];

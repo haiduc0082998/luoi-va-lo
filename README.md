@@ -52,6 +52,20 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 - **Cây công nghệ 3 nhánh, 12 công nghệ, mỗi công nghệ đổi vật lý thật:** thanh Boron xoá bẫy AZ-3, làm mát thụ động cứu lò khi sóng thần, dây chịu nhiệt 350 °C, siêu cao thế 750 kV, cáp siêu dẫn, AI điều độ tự đóng lại tuyến, kiểm toán số…
 - **Kiến trúc:** đập thủy điện 250 MW chắn sông (bọt trắng theo công suất); hai tháp làm mát rỗng ruột có vành miệng, mặt trong tối và bể nước; lõi lò dạng ống rỗng phát sáng; dàn tản nhiệt quạt quay theo nhiệt độ; bồn nước, hàng rào, đèn đường sáng về đêm; trạm cửa khẩu.
 
+**Giai đoạn 4: ngoại giao & quân sự**
+- Ba nước láng giềng có AI riêng: Cộng hoà Đông Lâm (khách mua điện), Vương quốc Bắc Sơn (giàu than, hay gây sức ép), Liên bang Nam Hải (ôn hoà, sợ phóng xạ). Quan hệ trôi theo uy tín quốc tế, sụt mạnh khi rò phóng xạ hoặc dùng điện làm vũ khí.
+- Đề nghị ngoại giao hai lần mỗi ngày: than giá rẻ, vay ưu đãi, chia sẻ công nghệ, mua thêm điện, hoặc đòi tiền nhượng quyền. Có thể cử phái đoàn để cải thiện quan hệ.
+- Quan hệ dưới 25: phá hoại trạm điện. Dưới 8: tuyên chiến, tên lửa đánh vào nhà máy và trạm, kể cả nhà máy hạt nhân (có thể gây LOCA và rò phóng xạ). Đình chiến tốn tiền.
+- Quân đội: tuyển đơn vị, điều đi canh gác từng công trình (lều lính, xe quân sự, bệ phòng không hiện trên bản đồ). Lính gác chặn được phá hoại và 80% tên lửa.
+
+**Tổ máy số 2**
+- Nghiên cứu "Thiết kế tổ máy số 2", rồi khởi công: 30 triệu USD, 3 ngày, có giàn giáo và cần cẩu trên bản đồ.
+- Lò thứ hai có vật lý riêng, điều khiển riêng (thẻ Tổ máy 1 / Tổ máy 2). Máy biến áp nhà máy nâng lên 2 400 MVA. Kỹ sư vận hành cả hai tổ.
+
+**Lớp 3: sơ đồ điện tự dùng**
+- Trong bảng nhà máy hạt nhân: lưới ngoài → CB1 → thanh cái A (bơm 1, 2); diesel → CB2 → thanh cái B (bơm 3, 4); CB3 nối hai thanh cái. Bấm máy cắt để đóng hoặc mở, đường có điện sáng màu hổ phách.
+- Diesel tự khởi động khi thanh cái A mất nguồn lưới. Mở nhầm máy cắt có thể làm bơm mất điện, lò SCRAM, rồi kéo theo quá tải dây và mất điện dây chuyền.
+
 ## Cấu trúc mã
 
 ```
@@ -61,6 +75,7 @@ src/
   engineers.js         gacha và hành vi tự vận hành của kỹ sư
   game.js              thời gian, kinh tế, lạm phát, tham nhũng, lòng dân, xây dựng, kịch bản
   policy.js            thị trường điện, phe phái, sắc lệnh, cây công nghệ, điều kiện thua
+  world.js             các nước láng giềng, đề nghị, phá hoại, chiến tranh, quân đội canh gác
   map.js               hàm độ cao địa hình và luật đặt công trình
   world/terrain.js     lưới địa hình low-poly, mặt nước, giao tia với mặt đất
   world/scene.js       công trình, đường dây trên cột, lửa, khói, phóng xạ, ngày/đêm
@@ -73,9 +88,10 @@ tests/                 kiểm thử lưới, lò, AZ-3 và vòng chơi
 
 Phần vật lý tách khỏi engine, nên kiểm thử được bằng Node và sau này chuyển sang Web Worker khi lưới có hàng nghìn nút.
 
-## Lộ trình tiếp theo
+## Ý tưởng mở rộng
 
-- **Giai đoạn 4:** bản đồ thế giới, nhiều quốc gia có AI riêng (mua bán điện, phản ứng khi có sự cố phóng xạ), quân đội bảo vệ hạ tầng.
-- **Lớp 3 (Blueprint):** góc nhìn bên trong nhà máy để tự nối mạch và đặt thiết bị.
+- Thêm loại nhà máy: điện gió, mặt trời, pin lưu trữ để tích điện ban đêm, bán giờ cao điểm.
+- Lưu và tải ván chơi; bảng thành tích.
+- Mỗi nước láng giềng có lưới điện riêng mô phỏng thật, có thể mua điện khi mình thiếu.
 
 > Mô hình đã đơn giản hoá cho trò chơi. Các con số đúng bậc độ lớn, không dùng để thiết kế thật.
