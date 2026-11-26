@@ -10,12 +10,18 @@ export const T_IN = 290;                // °C nước vào lõi
 export const P_RELIEF = 17, P_RUPTURE = 22; // MPa
 export const T_DAMAGE = 1100, T_H2 = 900, T_MELT = 2800;
 export const DIESEL_START = 15;         // giây
+// Hiệu ứng SCRAM dương (AZ-3, Chernobyl 1986): thanh RBMK có đầu đẩy bằng than chì.
+// Khi thanh từ vị trí rút cao bắt đầu đi xuống, phần than chì đẩy nước khỏi đáy kênh trước
+// khi phần hấp thụ kịp vào → vài giây đầu độ phản ứng TĂNG. Lò đang nóng, nhiều hơi thì đủ để vọt công suất.
+export const AZ_PEAK = 42;              // đơn vị độ phản ứng ở đỉnh hiệu ứng
+export const AZ_TRAVEL = 20;            // % hành trình thanh có hiệu ứng
+export const RBMK_ROD_SPEED = 5;        // %/s (≈ 18–20 s đi hết như RBMK thật)
 const CREF = FLOW_NOM * CP_WATER * EPS;
 
 export const createReactor = (o = {}) => ({
   rod: 70, rodCmd: 70, Pf: RATED, D1: 0.04 * RATED, D2: 0.025 * RATED, T: 354, flow: 1,
   pumps: [1, 1, 1, 1], offsite: true, diesel: true, dieselT: 0, porv: true, rps: true, rbmk: false,
-  scram: false, H2: 0, p: 15.5, porvOpen: false, loca: false, boom: false, melt: false, dmg: false,
+  scram: false, scramFrom: null, H2: 0, p: 15.5, porvOpen: false, loca: false, boom: false, melt: false, dmg: false,
   release: 0, plume: 0, wind: Math.random() * 360, Qout: 0, Qgen: 0, rho: 0, Pe: 0, flash: 0, ...o,
 });
 
@@ -23,8 +29,11 @@ export const pumpsPowered = (R) => R.offsite || (R.diesel && R.dieselT >= DIESEL
 export const outletTemp = (R) => T_IN + EPS * (R.T - T_IN);
 
 export function stepReactor(R, dt, emit = () => {}) {
-  if (R.scram) R.rodCmd = 0;
-  const rate = R.scram ? 35 : 6; // %/s
+  if (R.scram) {
+    R.rodCmd = 0;
+    if (R.scramFrom === null) R.scramFrom = R.rod;
+  } else R.scramFrom = null;
+  const rate = R.scram ? (R.rbmk ? RBMK_ROD_SPEED : 35) : 6; // %/s
   R.rod += Math.max(-rate * dt, Math.min(rate * dt, R.rodCmd - R.rod));
 
   if (R.offsite) R.dieselT = 0;
@@ -37,7 +46,8 @@ export function stepReactor(R, dt, emit = () => {}) {
   R.flow += ((target - R.flow) * dt) / (target > R.flow ? 5 : 15); // khởi động 5 s, quán tính dừng 15 s
 
   const voidTerm = R.rbmk ? 1.6 * Math.max(0, R.T - 370) : 0; // hệ số rỗng dương
-  R.rho = 2.7 * (R.rod - 50) - (R.T - 300) + voidTerm;
+  R.az = azEffect(R);
+  R.rho = 2.7 * (R.rod - 50) - (R.T - 300) + voidTerm + R.az;
   const coreGone = R.melt || (R.rbmk && R.boom);
   R.Pf = coreGone
     ? Math.max(3e3, R.Pf * Math.exp(-3 * dt))
@@ -72,3 +82,16 @@ export function stepReactor(R, dt, emit = () => {}) {
   R.plume = Math.min(1, R.plume + (R.release * dt) / 900);
   R.Pe = !R.loca && R.flow > 0.2 && R.T > 300 ? 0.33 * Math.max(0, R.Qout) : 0;
 }
+
+/** Độ phản ứng dương thêm vào trong vài giây đầu SCRAM của lò kiểu RBMK. */
+export function azEffect(R) {
+  if (!R.rbmk || !R.scram || R.scramFrom === null) return 0;
+  const travel = R.scramFrom - R.rod;
+  if (travel <= 0 || travel >= AZ_TRAVEL) return 0;
+  const withdrawn = Math.max(0, (R.scramFrom - 40) / 60); // chỉ đáng kể khi thanh đang rút cao
+  const voids = 1 + Math.max(0, R.T - 370) / 60;          // càng nhiều hơi càng mạnh
+  return AZ_PEAK * withdrawn * voids * Math.sin((Math.PI * travel) / AZ_TRAVEL);
+}
+
+/** Màn hình số 5 chữ số của bàn điều khiển (MW nhiệt), kẹt ở 99999 khi vượt thang. */
+export const mwDisplay = (R) => String(Math.min(99999, Math.round(R.Pf / 1e6))).padStart(5, '0');
