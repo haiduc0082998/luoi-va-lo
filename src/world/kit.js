@@ -80,7 +80,7 @@ export function seeded(str) {
 }
 
 /** Tháp làm mát hyperboloid: xoay một đường cong bán kính quanh trục Y (hai mặt, không có nắp). */
-export function hyperboloid(app, parent, p, m, { height = 22, base = 9.5, waist = 5.8, top = 6.8, waistAt = 0.7, rings = 14, segs = 28 } = {}) {
+export function hyperboloid(app, parent, p, m, { height = 22, base = 9.5, waist = 5.8, top = 6.8, waistAt = 0.7, rings = 14, segs = 28, inside = false, shadow = true } = {}) {
   const R = (t) => {
     if (t < waistAt) { const k = t / waistAt; return waist + (base - waist) * (1 - k) ** 2; }
     const k = (t - waistAt) / (1 - waistAt); return waist + (top - waist) * k ** 2;
@@ -92,17 +92,39 @@ export function hyperboloid(app, parent, p, m, { height = 22, base = 9.5, waist 
       const a = (j / segs) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
       pos.push(r * c, t * height, r * s);
       const n = new pc.Vec3(c, -dr, s).normalize();
+      if (inside) n.mulScalar(-1);
       nor.push(n.x, n.y, n.z);
     }
   }
   for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) {
     const a = i * (segs + 1) + j, b = a + segs + 1;
-    idx.push(a, b, a + 1, a + 1, b, b + 1);
+    if (inside) idx.push(a, a + 1, b, a + 1, b + 1, b); else idx.push(a, b, a + 1, a + 1, b, b + 1);
   }
   const mesh = new pc.Mesh(app.graphicsDevice);
   mesh.setPositions(pos); mesh.setNormals(nor); mesh.setIndices(idx); mesh.update();
   const e = new pc.Entity();
-  e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, m)], castShadows: true, receiveShadows: true });
+  e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, m)], castShadows: shadow, receiveShadows: true });
   e.setLocalPosition(p[0], p[1], p[2]); parent.addChild(e);
   return e;
+}
+
+/** Tháp làm mát rỗng ruột: vỏ ngoài sáng, vỏ trong tối, vành miệng, bể nước dưới đáy. */
+export function hollowTower(app, parent, p, M) {
+  const g = new pc.Entity(); g.setLocalPosition(p[0], p[1], p[2]); parent.addChild(g);
+  hyperboloid(app, g, [0, 0, 0], M.tower);
+  hyperboloid(app, g, [0, 0.05, 0], M.towerIn, { base: 9.1, waist: 5.45, top: 6.45, inside: true, shadow: false });
+  meshEnt(app, g, new pc.TorusGeometry({ ringRadius: 6.65, tubeRadius: 0.28, segments: 32, sides: 6 }), [0, 22, 0], M.metal);
+  ent(g, 'cylinder', [0, 0.5, 0], [17.5, 0.3, 17.5], M.basin, false);
+  for (let i = 0; i < 12; i++) { // chân cột chữ V quanh đế
+    const a = (i / 12) * Math.PI * 2;
+    ent(g, 'box', [Math.cos(a) * 9.4, 0.8, Math.sin(a) * 9.4], [0.5, 1.6, 0.5], M.metal);
+  }
+  return g;
+}
+
+/** Cột đèn đường: thân + bóng phát sáng (vật liệu dùng chung để bật/tắt theo đêm). */
+export function lamp(parent, x, y, z, M) {
+  ent(parent, 'cylinder', [x, y + 2.5, z], [0.18, 5, 0.18], M.metal);
+  ent(parent, 'box', [x + 0.5, y + 5, z], [1.2, 0.15, 0.2], M.metal);
+  ent(parent, 'sphere', [x + 1, y + 4.85, z], [0.45, 0.3, 0.45], M.bulb, false);
 }

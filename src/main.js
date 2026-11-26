@@ -5,6 +5,7 @@ import { buildWorld, nodeGround, PICK_RADIUS } from './world/scene.js';
 import { createOrbitCamera } from './world/camera.js';
 import { pick, groundPoint } from './world/picking.js';
 import { createHud } from './ui/hud.js';
+import { createStage5 } from './ui/stage5.js';
 import { fmt } from './util.js';
 
 const G = Game.createGame();
@@ -45,7 +46,7 @@ function nodeClicked(id) {
     hud.setModeHint(`Kéo dây từ ${Game.nodeById(G, id).name}: bấm công trình thứ hai (${fmt(hud.ui.newKv, hud.ui.newKv === 10.5 ? 1 : 0)} kV, ${hud.ui.newA} mm²).`);
     return;
   }
-  const l = Game.buildLine(G, lineFrom, id, hud.ui.newKv, hud.ui.newA);
+  const l = Game.buildLine(G, lineFrom, id, hud.ui.newKv, hud.ui.newA, hud.ui.sc);
   if (l) { setTool('select'); hud.select({ kind: 'line', id: l.id }); }
 }
 
@@ -80,6 +81,7 @@ hud = createHud(G, {
     fit();
   },
 });
+const s5 = createStage5(G);
 document.getElementById('lineRows').addEventListener('click', (e) => {
   const tr = e.target.closest('tr'); if (!tr) return;
   const v = world.lineViews.get(tr.dataset.id);
@@ -93,7 +95,7 @@ function updateTags() {
   for (const n of G.net.nodes) {
     if (!tags.has(n.id)) {
       const el = document.createElement('div'); el.className = 'tag'; stage.appendChild(el);
-      el.addEventListener('click', () => nodeClicked(n.id));
+      el.addEventListener('click', () => { nodeClicked(n.id); if (hud.ui.tool === 'select') camera.focus(n.x, nodeGround(n), n.z, 75); });
       tags.set(n.id, el);
     }
     const el = tags.get(n.id);
@@ -103,7 +105,7 @@ function updateTags() {
     el.style.display = visible ? '' : 'none';
     if (!visible) continue;
     el.style.transform = `translate(${screen.x}px, ${screen.y}px) translate(-50%, -100%)`;
-    const status = n.state === 'fire' ? ' · CHÁY' : n.type === 'city' ? ` · ${fmt(n.served)}/${fmt(n.demand)} MW` : n.type === 'nuclear' ? ` · ${fmt(G.reactor.Pe / 1e6)} MW` : n.type === 'coal' ? ` · ${fmt(n.gen)} MW` : '';
+    const status = n.state === 'fire' ? ' · CHÁY' : n.type === 'hydro' ? ` · ${fmt(n.gen)} MW` : n.type === 'border' ? (G.market.exportOn ? ` · xuất ${fmt(n.served)} MW` : '') : n.type === 'city' ? ` · ${fmt(n.served)}/${fmt(n.demand)} MW` : n.type === 'nuclear' ? ` · ${fmt(G.reactor.Pe / 1e6)} MW` : n.type === 'coal' ? ` · ${fmt(n.gen)} MW` : '';
     const text = n.name + status;
     if (el.textContent !== text) el.textContent = text;
     el.classList.toggle('alert', n.state === 'fire' || (n.type === 'city' && n.frac < 0.99) || (n.type === 'nuclear' && (G.reactor.scram || G.reactor.boom)));
@@ -118,9 +120,10 @@ app.on('update', (dt) => {
   world.setGhost(G, hud.ui.tool, cursor, lineFrom ? Game.nodeById(G, lineFrom) : null);
   updateTags();
   hud.render();
+  s5.render();
 });
 
-Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Hai nhà máy, hai trạm và hai thành phố đang chờ lệnh. Bấm vào công trình để điều khiển.');
+Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai trạm, hai thành phố và cửa khẩu sang nước láng giềng đang chờ lệnh. Bấm vào công trình để điều khiển.');
 setTool('select');
 app.start();
 window.__game = G; // để kiểm thử và gỡ lỗi

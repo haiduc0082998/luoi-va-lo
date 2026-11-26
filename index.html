@@ -9,7 +9,7 @@
 </head>
 <body>
 <header class="top">
-  <h1>Lưới &amp; Lò<small>Chiến lược năng lượng · Giai đoạn 3</small></h1>
+  <h1>Lưới &amp; Lò<small>Chiến lược năng lượng · Giai đoạn 5</small></h1>
   <div class="stat">
     <div>Thời gian<b id="clock">Ngày 1, 08:00</b></div>
     <div>Tốc độ<div class="seg" id="speed"></div></div>
@@ -19,6 +19,7 @@
     <div>Tần số<b id="hz"></b></div>
     <div>Lạm phát<b id="infl"></b></div>
     <div>Tham nhũng<b id="corr"></b></div>
+    <div>Uy tín<b id="rep"></b></div>
   </div>
 </header>
 <div class="ticker"><div class="track" id="track"></div></div>
@@ -47,6 +48,7 @@
       </dl>
       <p class="lab sp">Tuyến mới: điện áp</p><div class="seg" id="newKv"></div>
       <p class="lab">Tuyến mới: tiết diện dây nhôm (mm²)</p><div class="seg" id="newA"></div>
+      <div class="btns" id="scWrap" hidden><button class="btn" id="sc" type="button">Cáp siêu dẫn</button></div>
       <p class="note" id="costNote"></p>
       <p class="lab sp">Các tuyến (bấm để chọn)</p>
       <div class="scroll"><table class="lines"><thead><tr><th>Tuyến</th><th>MW</th><th>A</th><th>°C</th></tr></thead><tbody id="lineRows"></tbody></table></div>
@@ -70,6 +72,7 @@
       <p class="lab sp">Bản tin</p><ol class="log" id="log"></ol>
     </section>
   </div>
+  <section class="panel s5" id="s5"></section>
   <p class="note">Mô hình đã đơn giản hoá cho trò chơi: lưới tính theo phân bố công suất một chiều, dòng điện một pha tương đương. Các con số đúng bậc độ lớn, không dùng để thiết kế thật.</p>
 </div>
 <script type="module" src="/src/main.js"></script>

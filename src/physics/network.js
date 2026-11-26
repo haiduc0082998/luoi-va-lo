@@ -16,7 +16,9 @@ export const RELAY_DELAY = 1.5;
 export const KM_PER_UNIT = 2;        // 1 đơn vị bản đồ 3D = 2 km
 
 export const defaultImax = (A) => Math.round((A * 3.5) / 50) * 50;
-export const RATED_MVA = { sub: 800, city: 900, nuclear: 1200, coal: 800 };
+export const RATED_MVA = { sub: 800, city: 900, nuclear: 1200, coal: 800, hydro: 400, border: 700 };
+export const GEN_ORDER = ['nuclear', 'hydro', 'coal'];  // điều độ: hạt nhân chạy nền, thủy điện rẻ, than đắt nhất
+export const isLoad = (n) => n.type === 'city' || n.type === 'border';
 
 let nextId = 1;
 export function createNode(o) {
@@ -100,7 +102,7 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
   const byId = new Map(net.nodes.map((n) => [n.id, n]));
   for (const n of net.nodes) {
     const ok = n.state === 'ok';
-    n.demand = ok && n.type === 'city' ? n.demandBase * env.demandMul : 0;
+    n.demand = !ok ? 0 : n.type === 'city' ? n.demandBase * env.demandMul : n.type === 'border' ? (env.exportMW ?? 0) : 0;
     n.cap = ok ? env.cap[n.id] ?? 0 : 0;
     n.gen = n.served = n.through = n.frac = n.hz = 0;
   }
@@ -119,7 +121,7 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
       hz = cap >= need ? 50 + 0.2 * Math.min(1, (cap - need) / need) : 49.8 - 1.2 * (1 - cap / need);
       // Điều độ: hạt nhân chạy nền trước, nhiệt điện bù phần còn thiếu
       let left = Math.min(cap, need);
-      for (const type of ['nuclear', 'coal']) {
+      for (const type of GEN_ORDER) {
         for (const n of isl.nodes) {
           if (n.type !== type) continue;
           n.gen = Math.min(n.cap, left); left -= n.gen;
@@ -128,7 +130,7 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
     } else if (cap > 0) hz = 50.2;
     for (const n of isl.nodes) {
       n.island = k; n.hz = hz;
-      if (n.type === 'city') { n.frac = f; n.served = n.demand * f; }
+      if (isLoad(n)) { n.frac = f; n.served = n.demand * f; }
     }
     D += demand; S += demand * f; G += isl.nodes.reduce((s, n) => s + n.gen, 0);
     if (demand > 0 && cap > 0) { hzSum += hz * demand; hzW += demand; }
@@ -178,7 +180,7 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
     const A = l.A * 1e-6, rPerM = l.R / (l.L * 1000), d = Math.sqrt((4 * A) / Math.PI);
     const heat = l.I * l.I * rPerM, cool = H_CONV * Math.PI * d * (l.Tw - env.Ta);
     l.Tw = Math.min(700, Math.max(-20, l.Tw + ((heat - cool) / (C_VOL * A)) * dt));
-    if (l.Tw >= WIRE_FIRE_T && l.state === 'ok') {
+    if (l.Tw >= (env.fireT ?? WIRE_FIRE_T) && l.state === 'ok') {
       l.state = 'fire'; l.I = l.P = 0; l.lossPrev = 0;
       emit('lineFire', { line: l });
     }
@@ -186,8 +188,8 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
 
   // Máy biến áp ở mỗi nút
   for (const n of net.nodes) {
-    const Smva = n.type === 'city' ? n.served : n.type === 'sub' ? n.through : n.gen;
-    const Tss = 40 + 60 * (Smva / n.rated) ** 2;
+    const Smva = isLoad(n) ? n.served : n.type === 'sub' ? n.through : n.gen;
+    const Tss = 40 + 60 * (Smva / (n.rated * (env.ratedMul ?? 1))) ** 2;
     n.Tt += ((Tss - n.Tt) * dt) / 600;
     if (n.Tt >= TX_FIRE_T && n.state === 'ok') { n.state = 'fire'; emit('txFire', { node: n }); }
   }

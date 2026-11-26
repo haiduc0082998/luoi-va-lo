@@ -1,6 +1,7 @@
 // Giao diện HTML: thanh chỉ số quốc gia, công cụ xây dựng, bảng thanh tra công trình được chọn, bảng quốc gia.
 import { fmt, esc, clamp, ramp, rgb, WIRE_RAMP, FUEL_RAMP } from '../util.js';
 import * as Game from '../game.js';
+import { has, spotPrice } from '../policy.js';
 import { lineUsable, WIRE_FIRE_T, TX_FIRE_T, RHO_AL } from '../physics/network.js';
 import { RATED, C_CORE, FLOW_NOM, outletTemp, T_IN, DIESEL_START, mwDisplay } from '../physics/reactor.js';
 
@@ -9,7 +10,7 @@ const set = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textCo
 const kvText = (v) => `${fmt(v, v === 10.5 ? 1 : 0)} kV`;
 const money = (v) => `${fmt(v, 1)} tr USD`;
 const STATE_TEXT = { ok: 'Đang vận hành', tripped: 'Rơ-le đã cắt', collapse: 'Cắt do sụp đổ điện áp', fire: 'Cháy, đứt dây' };
-const TYPE_TEXT = { nuclear: 'Nhà máy hạt nhân', coal: 'Nhà máy nhiệt điện than', sub: 'Trạm biến áp', city: 'Thành phố' };
+const TYPE_TEXT = { nuclear: 'Nhà máy hạt nhân', coal: 'Nhà máy nhiệt điện than', sub: 'Trạm biến áp', city: 'Thành phố', hydro: 'Nhà máy thủy điện', border: 'Đường dây liên kết quốc tế' };
 
 const REACTOR_LAMPS = [
   ['SCRAM', (R) => R.scram, 'warn'], ['Mất lưới ngoài', (R) => !R.offsite, 'warn'],
@@ -24,7 +25,7 @@ const bar = (id, marks = []) => `<div class="bar"><i id="${id}"></i>${marks.map(
 const row = (label, sub, id, extra = '') => `<div><dt>${label}${sub ? `<small id="${id}s">${sub}</small>` : ''}</dt><dd id="${id}"></dd>${extra}</div>`;
 
 export function createHud(G, { onTool, onView, onSelect, onQuality }) {
-  const ui = { tool: 'select', selection: null, newKv: 220, newA: 400, quality: true, inspKey: '' };
+  const ui = { tool: 'select', selection: null, newKv: 220, newA: 400, sc: false, quality: true, inspKey: '' };
 
   const seg = (id, values, label, get, setv) => {
     const el = $(id);
@@ -39,7 +40,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   seg('tools', ['select', 'sub', 'line'], (v) => ({ select: 'Chọn', sub: 'Xây trạm', line: 'Kéo dây' }[v]), () => ui.tool, (v) => { ui.tool = v; onTool(v); });
   let view = 'overview';
   seg('views', ['overview', 'nuclear', 'capital', 'west'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây' }[v]), () => view, (v) => { view = v; onView(v); });
-  seg('newKv', [10.5, 110, 220, 500], kvText, () => ui.newKv, (v) => (ui.newKv = v));
+  seg('newKv', [10.5, 110, 220, 500, 750], kvText, () => ui.newKv, (v) => (ui.newKv = v));
+  $('sc').addEventListener('click', () => { ui.sc = !ui.sc; });
   seg('newA', [95, 150, 240, 400, 630], (v) => v, () => ui.newA, (v) => (ui.newA = v));
   $('skipDN').addEventListener('click', () => Game.skipDayNight(G));
   $('quality').addEventListener('click', () => { ui.quality = !ui.quality; $('quality').textContent = `Đồ hoạ: ${ui.quality ? 'cao' : 'thấp'}`; onQuality(ui.quality); });
@@ -87,6 +89,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     const tx = row('Nhiệt độ dầu máy biến áp', 'cháy ở 150 °C', 'nT', bar('nTb', [93.7]));
     const repair = `<div class="btns"><button class="btn" data-act="repairNode" type="button" ${n.state === 'fire' ? '' : 'hidden'}>Thay máy biến áp (${money(Game.NODE_REPAIR * G.priceLevel)})</button></div>`;
     if (n.type === 'city') return `${head}<dl>${row('Nhu cầu lúc này', 'theo giờ trong ngày và nhiệt độ', 'cD')}${row('Được cấp', '', 'cS')}${row('Tần số tại chỗ', '', 'cH')}${tx}</dl>${repair}`;
+    if (n.type === 'hydro') return `${head}<dl>${row('Đang phát', 'chạy sau hạt nhân, trước nhiệt điện; không tốn nhiên liệu', 'hG')}${row('Công suất tối đa', '', 'hM')}${tx}</dl>${repair}`;
+    if (n.type === 'border') return `${head}<dl>${row('Hợp đồng xuất khẩu', 'quản lý ở bảng Thị trường điện bên dưới', 'bC')}${row('Đang giao', '', 'bS')}${row('Giá giao ngay', 'cao nhất 19–20 giờ', 'bP')}${tx}</dl>${repair}`;
     if (n.type === 'sub') return `${head}<dl>${row('Công suất đi qua', '', 'sP')}${row('Số tuyến nối vào', '', 'sN')}${tx}</dl>${repair}`;
     if (n.type === 'coal') return `${head}<dl>${row('Đang phát', 'điều độ tự động bù phần hạt nhân thiếu', 'kG')}${row('Chi phí than', `${Game.COAL_USD_MWH} USD/MWh × chỉ số giá`, 'kC')}${tx}</dl>
       <div class="row sp"><label for="kMax">Công suất khả dụng <output id="kMaxV"></output></label><input type="range" id="kMax" min="0" max="600" step="10" value="${G.coalMax}"></div>${repair}`;
@@ -157,6 +161,11 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     if (n.type === 'city') {
       set('cD', `${fmt(n.demand)} MW`); set('cS', `${fmt(n.served)} MW (${fmt(n.frac * 100)}%)`);
       set('cH', n.frac > 0 ? `${fmt(n.hz, 2)} Hz` : 'mất điện');
+    } else if (n.type === 'hydro') {
+      set('hG', `${fmt(n.gen)} MW`); set('hM', `${fmt(Game.HYDRO_MAX)} MW`);
+    } else if (n.type === 'border') {
+      set('bC', G.market.exportOn ? `${fmt(G.market.contractMW)} MW` : 'chưa ký'); set('bS', `${fmt(n.served)} MW`);
+      set('bP', `${fmt(spotPrice(G, Game.hourOfDay(G)))} USD/MWh`);
     } else if (n.type === 'sub') {
       set('sP', `${fmt(n.through)} MW`); set('sN', `${G.net.lines.filter((l) => l.a === n.id || l.b === n.id).length}`);
     } else if (n.type === 'coal') {
@@ -198,9 +207,14 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     set('hz', S.hz ? `${fmt(S.hz, 2)} Hz` : '—'); $('hz').className = S.hz && Math.abs(S.hz - 50) > 0.5 ? 'bad' : '';
     set('infl', `${fmt(G.inflation, 1)}%`); $('infl').className = G.inflation > 6 ? 'bad' : '';
     set('corr', `${fmt(G.corruption)}%`); $('corr').className = G.corruption > 35 ? 'bad' : '';
-    set('gDem', `${fmt(S.demand)} / ${fmt(S.served)} MW`); set('gGen', `${fmt(G.reactor.Pe / 1e6)} + ${fmt(Game.nodeById(G, 'coal').gen)} MW`);
+    set('rep', `${fmt(G.reputation)}%`); $('rep').className = G.reputation < 30 ? 'bad' : '';
+    for (const b of $('newKv').children) b.hidden = b.dataset.v === '750' && !has(G, 'uhv');
+    if (ui.newKv === 750 && !has(G, 'uhv')) ui.newKv = 500;
+    $('scWrap').hidden = !has(G, 'supercond'); if (!has(G, 'supercond')) ui.sc = false;
+    $('sc').setAttribute('aria-pressed', ui.sc);
+    set('gDem', `${fmt(S.demand)} / ${fmt(S.served)} MW`); set('gGen', `${fmt(G.reactor.Pe / 1e6)} + ${fmt(Game.nodeById(G, 'hydro').gen)} + ${fmt(Game.nodeById(G, 'coal').gen)} MW`);
     set('gLoss', `${fmt(S.loss, 1)} MW`);
-    set('costNote', `Giá tuyến mới ≈ ${fmt(Game.lineCost(G, 1, ui.newKv, ui.newA) * 1000)} nghìn USD/km · trạm ${money(Game.subCost(G))} (đã gồm lạm phát và tham nhũng ${fmt(G.corruption)}%).`);
+    set('costNote', `Giá tuyến mới ≈ ${fmt(Game.lineCost(G, 1, ui.newKv, ui.newA, ui.sc) * 1000)} nghìn USD/km · trạm ${money(Game.subCost(G))} (đã gồm lạm phát và tham nhũng ${fmt(G.corruption)}%).`);
     const key = G.net.lines.map((l) => l.id).join() + (ui.selection?.id ?? '');
     if (key !== rowsKey) {
       rowsKey = key;
@@ -222,7 +236,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
         ? `<b class="t-${E.tier}">${esc(E.name)}</b><span>Chuyên môn ${E.skill}/100 · lương ${money(E.salary)}/ngày</span><small>${esc(E.desc)}</small>`
         : '<b>Chưa thuê kỹ sư</b><small>Bạn đang tự vận hành lò. Gacha để thuê người tự động bám tải, giữ nhiệt độ an toàn. Tham nhũng cao thì dễ trúng kỹ sư rởm.</small>';
     }
-    set('gacha', `Gacha kỹ sư (${money(Game.GACHA_COST * G.priceLevel)})`);
+    set('gacha', `Gacha kỹ sư (${money(Game.gachaCost(G))})`);
     set('engAuto', G.engAuto ? 'Kỹ sư: tự vận hành' : 'Kỹ sư: tạm dừng');
     $('engAuto').disabled = $('engFire').disabled = !E;
     set('inspect', `Thanh tra tham nhũng (${money(Game.INSPECT_COST * G.priceLevel)})`);

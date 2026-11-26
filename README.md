@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–3)
+## Có gì trong bản này (Giai đoạn 1–5)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -44,6 +44,14 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 - Lòng dân, biểu tình, bản tin thế giới.
 - **Gacha kỹ sư:** kỹ sư rởm (hoảng loạn bấm SCRAM, tắt nhầm bơm), chuyên gia quốc tế (bám tải, giữ nhiệt), tiến sĩ hạt nhân (bật lại bơm, hiểu bẫy AZ-3). Tham nhũng cao thì dễ trúng kỹ sư rởm.
 
+**Giai đoạn 5: thị trường, chính trị, công nghệ**
+- **Thị trường điện:** chỉnh giá bán lẻ (ảnh hưởng lòng dân, doanh nghiệp, ngân sách); giá giao ngay khu vực theo giờ, đỉnh 19–20 h; hợp đồng xuất khẩu qua Cửa khẩu Đông, cần tự kéo dây tới cửa khẩu; giao thiếu thì mất uy tín.
+- **Vũ khí năng lượng:** cắt điện xuất khẩu để ép đối phương; một ngày sau họ nhượng bộ (bồi thường) hoặc trả đũa (cấm vận than, hạ giá mua).
+- **Ba phe phái:** Dân chúng, Doanh nghiệp, Quân đội, cộng thêm uy tín quốc tế. Bốn sắc lệnh đánh đổi: trợ giá điện, độc quyền lưới, ngân sách quốc phòng, thiết quân luật.
+- **Thua cuộc:** đảo chính (quân đội dưới 10% suốt một ngày), cách mạng (lòng dân gần 0 suốt một ngày), vỡ nợ (ngân sách dưới −20 triệu USD suốt một ngày).
+- **Cây công nghệ 3 nhánh, 12 công nghệ, mỗi công nghệ đổi vật lý thật:** thanh Boron xoá bẫy AZ-3, làm mát thụ động cứu lò khi sóng thần, dây chịu nhiệt 350 °C, siêu cao thế 750 kV, cáp siêu dẫn, AI điều độ tự đóng lại tuyến, kiểm toán số…
+- **Kiến trúc:** đập thủy điện 250 MW chắn sông (bọt trắng theo công suất); hai tháp làm mát rỗng ruột có vành miệng, mặt trong tối và bể nước; lõi lò dạng ống rỗng phát sáng; dàn tản nhiệt quạt quay theo nhiệt độ; bồn nước, hàng rào, đèn đường sáng về đêm; trạm cửa khẩu.
+
 ## Cấu trúc mã
 
 ```
@@ -52,12 +60,14 @@ src/
   physics/reactor.js   lò phản ứng, kể cả hiệu ứng SCRAM dương AZ-3
   engineers.js         gacha và hành vi tự vận hành của kỹ sư
   game.js              thời gian, kinh tế, lạm phát, tham nhũng, lòng dân, xây dựng, kịch bản
+  policy.js            thị trường điện, phe phái, sắc lệnh, cây công nghệ, điều kiện thua
   map.js               hàm độ cao địa hình và luật đặt công trình
   world/terrain.js     lưới địa hình low-poly, mặt nước, giao tia với mặt đất
   world/scene.js       công trình, đường dây trên cột, lửa, khói, phóng xạ, ngày/đêm
   world/picking.js     chọn công trình/đường dây bằng chuột
   world/camera.js      camera quỹ đạo (xoay, di chuyển, thu phóng, cảm ứng)
   ui/hud.js            thanh chỉ số, bảng thanh tra, bảng quốc gia
+  ui/stage5.js         bảng Thị trường · Chính trị · Cây công nghệ, màn hình thua
 tests/                 kiểm thử lưới, lò, AZ-3 và vòng chơi
 ```
 
@@ -65,8 +75,7 @@ Phần vật lý tách khỏi engine, nên kiểm thử được bằng Node và
 
 ## Lộ trình tiếp theo
 
-- **Cây công nghệ:** thanh điều khiển cải tiến bỏ bẫy AZ-3, dây chịu nhiệt, siêu cao thế, lò thế hệ mới.
-- **Giai đoạn 4:** bản đồ thế giới, nhiều quốc gia, AI đối thủ, quân đội, ngoại giao, chính sách.
+- **Giai đoạn 4:** bản đồ thế giới, nhiều quốc gia có AI riêng (mua bán điện, phản ứng khi có sự cố phóng xạ), quân đội bảo vệ hạ tầng.
 - **Lớp 3 (Blueprint):** góc nhìn bên trong nhà máy để tự nối mạch và đặt thiết bị.
 
 > Mô hình đã đơn giản hoá cho trò chơi. Các con số đúng bậc độ lớn, không dùng để thiết kế thật.

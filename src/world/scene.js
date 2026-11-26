@@ -5,13 +5,13 @@ import { clamp, ramp, WIRE_RAMP, FUEL_RAMP } from '../util.js';
 import { RATED, outletTemp, DIESEL_START } from '../physics/reactor.js';
 import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
-import { height, WATER_Y, buildable } from '../map.js';
+import { height, WATER_Y, buildable, riverCenter } from '../map.js';
 import { buildTerrain } from './terrain.js';
-import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid } from './kit.js';
+import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid, hollowTower, lamp } from './kit.js';
 
 const SEG = 6;
-export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0] };
-export const PICK_RADIUS = { nuclear: 17, coal: 10, sub: 6, city: 14 };
+export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0] };
+export const PICK_RADIUS = { nuclear: 17, coal: 10, sub: 6, city: 14, hydro: 13, border: 9 };
 const groundY = (x, z) => Math.max(height(x, z), WATER_Y);
 
 export function attachPoint(n, out = new pc.Vec3()) {
@@ -36,7 +36,12 @@ export function buildWorld(app) {
     flameA: mat('#000000', { emissive: '#ff5434', ei: 3 }), flameB: mat('#000000', { emissive: '#ffc04a', ei: 3 }),
     marker: mat('#000000', { emissive: '#ffd24a', ei: 2 }),
     ring: mat('#0b2230', { emissive: '#28beff', ei: 1.2 }), pulse: mat('#000000', { emissive: '#5ff5ff', ei: 3 }),
-    tower: (() => { const m = mat('#c9ccc4', { gloss: 0.2 }); m.cull = pc.CULLFACE_NONE; m.update(); return m; })(),
+    tower: mat('#c9ccc4', { gloss: 0.2 }), towerIn: mat('#2a2e31', { gloss: 0.05 }),
+    basin: mat('#1d5f86', { gloss: 0.9, emissive: '#0b3550', ei: 0.4 }),
+    core: (() => { const m = mat('#08202c', { emissive: '#28beff', ei: 1.5 }); m.cull = pc.CULLFACE_NONE; m.update(); return m; })(),
+    bulb: mat('#3a3a2a', { emissive: '#ffd27a', ei: 0 }), foam: mat('#eef8fb', { opacity: 0.85, emissive: '#bfe8f5', ei: 0.3 }),
+    gate: mat('#10161c'), tank: mat('#9aa6b0', { metal: 0.5, gloss: 0.6 }), flag: mat('#c8102e', { emissive: '#400008', ei: 0.3 }),
+    fence: mat('#8b958f', { metal: 0.4 }), damConcrete: mat('#a9b1b2', { gloss: 0.15 }), reservoir: mat('#2a6d93', { opacity: 0.9, gloss: 0.9 }),
     ghostOk: mat('#36b2ff', { opacity: 0.45, emissive: '#36b2ff', ei: 0.6 }),
     ghostBad: mat('#ff5434', { opacity: 0.45, emissive: '#ff5434', ei: 0.6 }),
   };
@@ -87,6 +92,7 @@ export function buildWorld(app) {
       for (const dx of [-0.8, 0, 0.8]) for (const dz of [-0.8, 0, 0.8]) fuel.push(ent(g, 'box', [dx, 3.6, dz], [0.42, 5, 0.42], M.fuel, false));
       const rods = [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]].map(([dx, dz]) => ent(g, 'box', [dx, 8.6, dz], [0.24, 5, 0.24], M.dark, false));
       ent(g, 'box', [0, 9.6, 0], [2.6, 1.2, 2.6], M.dark);
+      hyperboloid(app, g, [0, 1.1, 0], M.core, { height: 5.2, base: 1.65, waist: 1.65, top: 1.65, rings: 2, segs: 20, shadow: false }); // lõi rỗng phát sáng
       const corium = ent(g, 'sphere', [0, 1.2, 0], [4, 1.1, 4], M.corium, false); corium.enabled = false;
       const coreLight = light(g, [0, 4.5, 0], '#5cc8ff', 18);
       ent(g, 'cylinder', [5, 4.6, 0], [2.4, 7, 2.4], M.concrete);
@@ -99,13 +105,32 @@ export function buildWorld(app) {
       ent(g, 'box', [18, 3.5, 2], [13, 7, 9], M.concrete);
       ent(g, 'box', [18, 7.3, 2], [13.4, 0.8, 9.4], M.roof);
       ent(g, 'box', [14, 4, 9], [5, 8, 3], M.metal); // trạm phân phối
-      const tx = n.x + 18, tz = n.z - 12, ty = groundY(tx, tz);
-      hyperboloid(app, world, [tx, ty - 0.5, tz], M.tower);
+      const towers = [[n.x + 18, n.z - 12], [n.x + 36, n.z - 2]].map(([x, z]) => [x, groundY(x, z), z]);
+      for (const [x, y, z] of towers) hollowTower(app, world, [x, y - 0.4, z], M);
+      const [tx, ty, tz] = towers[0];
+      // Dàn tản nhiệt phụ với quạt quay theo nhiệt độ lõi
+      const fans = [-4.5, 0, 4.5].map((dx) => {
+        ent(g, 'box', [18 + dx, 1.2, 9.5], [3.4, 2.4, 2.6], M.dark);
+        ent(g, 'cylinder', [18 + dx, 2.6, 9.5], [2, 0.4, 2], M.metal);
+        return ent(g, 'box', [18 + dx, 2.9, 9.5], [1.8, 0.08, 0.3], M.lamp);
+      });
+      // Bồn nước làm mát, bồn cầu, hàng rào, đèn đường
+      ent(g, 'cylinder', [27, 2.5, -4], [3.6, 5, 3.6], M.tank); ent(g, 'cylinder', [27, 5.1, -4], [3.8, 0.3, 3.8], M.metal);
+      ent(g, 'sphere', [-9, 4, -9], [4.2, 4.2, 4.2], M.tank);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) ent(g, 'cylinder', [-9 + dx * 1.3, 1.2, -9 + dz * 1.3], [0.3, 2.4, 0.3], M.metal);
+      const fx0 = -16, fx1 = 30, fz0 = -16, fz1 = 16;
+      for (let x = fx0; x <= fx1; x += 4) for (const z of [fz0, fz1]) ent(g, 'box', [x, 1, z], [0.18, 2, 0.18], M.fence, false);
+      for (let z = fz0; z <= fz1; z += 4) for (const x of [fx0, fx1]) ent(g, 'box', [x, 1, z], [0.18, 2, 0.18], M.fence, false);
+      for (const y of [0.8, 1.8]) {
+        for (const z of [fz0, fz1]) ent(g, 'box', [(fx0 + fx1) / 2, y, z], [fx1 - fx0, 0.08, 0.08], M.fence, false);
+        for (const x of [fx0, fx1]) ent(g, 'box', [x, y, (fz0 + fz1) / 2], [0.08, 0.08, fz1 - fz0], M.fence, false);
+      }
+      for (const [x, z] of [[fx0, fz0], [fx1, fz0], [fx1, fz1], [fx0, fz1], [7, fz1], [7, fz0]]) lamp(g, x + 0.8, 0, z + (z < 0 ? 0.8 : -0.8), M);
+      let fanRot = 0;
       // Vòng phát sáng Cherenkov quanh vỏ lò: xanh khi ổn định, cam rồi đỏ khi quá nhiệt
       meshEnt(app, g, new pc.TorusGeometry({ ringRadius: 9.25, tubeRadius: 0.32, segments: 40, sides: 8 }), [0, 4.2, 0], M.ring);
       ent(g, 'box', [-14, 1.5, 10], [4, 3, 3], M.concrete);
-      const lamp = ent(g, 'sphere', [-14, 3.4, 10], [0.9, 0.9, 0.9], M.lamp, false);
-      void lamp;
+      ent(g, 'sphere', [-14, 3.4, 10], [0.9, 0.9, 0.9], M.lamp, false);
       const debris = [[3, 9, 2, 25], [-4, 8, -3, -35], [1, 12, -5, 60], [-6, 10, 4, -15]].map(([dx, y, dz, r]) => {
         const e = ent(g, 'box', [dx, y, dz], [3, 0.5, 2], M.concrete); e.setLocalEulerAngles(r, r * 2, r / 2); e.enabled = false; return e;
       });
@@ -124,6 +149,7 @@ export function buildWorld(app) {
         M.hot.emissiveIntensity = R.flow > 0.02 ? 0.8 : 0; M.hot.update();
         M.cold.emissiveIntensity = R.flow > 0.02 ? 0.4 : 0; M.cold.update();
         pumpRot += R.flow * 720 * dt; pump.setLocalEulerAngles(0, pumpRot % 360, 0);
+        fanRot += (200 + clamp(R.T - 280, 0, 400) * 3) * dt; fans.forEach((f, i) => f.setLocalEulerAngles(0, (fanRot + i * 40) % 360, 0));
         M.steam.emissive = col('#f2b13a'); M.steam.emissiveIntensity = R.Pe > 0 ? 0.6 : 0; M.steam.update();
         M.lamp.emissive = col(!R.diesel ? '#ff5434' : !R.offsite && R.dieselT >= DIESEL_START ? '#36b2ff' : !R.offsite ? '#f2b13a' : '#202020');
         M.lamp.emissiveIntensity = 2; M.lamp.update();
@@ -142,8 +168,9 @@ export function buildWorld(app) {
         col255(hotK > 0 ? [255, Math.round(150 - 120 * hotK), 30] : [40, 190, 255], M.ring.emissive);
         M.ring.emissiveIntensity = R.melt ? 3 : 0.4 + clamp((R.Pf / RATED) * 1.2, 0, 2.5) + hotK * 2;
         M.ring.update();
+        M.core.emissive = M.ring.emissive; M.core.emissiveIntensity = R.melt ? 0.2 : 0.6 + clamp((R.Pf / RATED) * 1.5, 0, 3) + hotK * 2; M.core.update();
         acc += dt * 5 * clamp(R.Pe / (0.33 * RATED), 0, 1);
-        while (acc >= 1) { acc -= 1; emit(tx, ty + 22, tz, '#f3f5f4', 5, 9); }
+        while (acc >= 1) { acc -= 1; const [x, y, z] = towers[Math.random() < 0.5 ? 0 : 1]; emit(x, y + 20, z, '#f3f5f4', 5, 9); }
       };
     },
 
@@ -184,6 +211,46 @@ export function buildWorld(app) {
       };
     },
 
+    hydro(n, g) {
+      // Đập bê tông chắn ngang sông (sông chảy theo trục z), hồ chứa phía thượng lưu, cửa xả bọt trắng
+      const base = -2.6, top = 9;
+      const dir = (riverCenter(n.z + 1) - riverCenter(n.z - 1)) / 2, yaw = (Math.atan(dir) * 180) / Math.PI;
+      g.setLocalPosition(n.x, 0, n.z); g.setLocalEulerAngles(0, -yaw, 0);
+      ent(g, 'box', [0, (base + top) / 2, 0], [26, top - base, 4], M.damConcrete);
+      ent(g, 'box', [0, (base + top) / 2 - 2, 3], [26, top - base - 4, 2.2], M.damConcrete);
+      ent(g, 'box', [0, top + 0.9, -0.5], [14, 1.8, 2.6], M.dark);
+      ent(g, 'box', [11, top - 1, 6], [6, 5, 6], M.concrete); // nhà máy phát ở chân đập
+      const res = ent(g, 'box', [0, 0.6, -16], [11, 0.2, 28], M.reservoir, false);
+      void res;
+      const foams = [-6, -2, 2, 6].map((x) => {
+        ent(g, 'box', [x, base + 2.6, 4.2], [2.4, 3, 0.6], M.gate);
+        return ent(g, 'box', [x, WATER_Y + 0.25, 7], [3, 0.6, 5], M.foam, false);
+      });
+      for (const x of [-12, 12]) lamp(g, x, top + 1.8, 0, M);
+      return (G, dt, t) => {
+        const k = clamp(n.gen / 250, 0, 1);
+        foams.forEach((f, i) => { f.enabled = k > 0.02; f.setLocalScale(3, 0.6 + k * 0.6, (3 + k * 4) * (0.85 + 0.15 * Math.sin(t * 8 + i))); });
+      };
+    },
+
+    border(n, g) {
+      const y0 = groundY(n.x, n.z);
+      g.setLocalPosition(n.x, y0, n.z);
+      ent(g, 'box', [0, 0.2, 0], [12, 0.4, 14], M.concrete);
+      for (const z of [-4, 4]) ent(g, 'box', [3, 1.6, z], [3, 3.2, 3], M.dark);
+      const arm = ent(g, 'box', [3, 1.4, 0], [0.3, 0.3, 7], M.flag);
+      ent(g, 'cylinder', [-4, 6, 5], [0.2, 12, 0.2], M.metal);
+      const flag = ent(g, 'box', [-4, 11, 6.3], [0.05, 1.6, 2.6], M.flag, false);
+      const V = (x, y, z) => new pc.Vec3(n.x + x, y0 + y, n.z + z);
+      for (const z of [-3.5, 3.5]) beam(g, V(-4, 0, z), V(-4, 7.4, z), 0.3, M.metal);
+      beam(g, V(-4, 7.4, -3.5), V(-4, 7.4, 3.5), 0.3, M.metal);
+      lamp(g, 6, 0, -6, M); lamp(g, 6, 0, 6, M);
+      return (G, dt, t) => {
+        arm.setLocalEulerAngles(G.market.exportOn ? 0 : 0, 0, 0);
+        flag.setLocalEulerAngles(0, 10 * Math.sin(t * 2), 0);
+      };
+    },
+
     city(n, g) {
       const y0 = groundY(n.x, n.z);
       g.setLocalPosition(n.x, y0, n.z);
@@ -203,6 +270,8 @@ export function buildWorld(app) {
         ent(g, 'box', [x, h / 2, z], [3.8 + r(), h, 4 + r()], m);
       }
       const glow = light(g, [0, 8, 0], '#ffc861', 34);
+      const ring = side * 2.9 + 3;
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; lamp(g, Math.cos(a) * ring, 0, Math.sin(a) * ring, M); }
       const blaze = fire(g, [side * 2.6 + 2, 1, 0], 1, M);
       return (G, dt, t, day) => {
         const k = n.state === 'ok' ? n.frac : 0;
@@ -372,6 +441,7 @@ export function buildWorld(app) {
     sky.lerp(NIGHT, DAY, day);
     camera.camera.clearColor = sky; app.scene.fog.color = sky;
 
+    M.bulb.emissiveIntensity = clamp((0.55 - day) * 5, 0, 2.5); M.bulb.update();
     for (const v of nodeViews.values()) v.update(G, dt, time, day);
     for (const v of lineViews.values()) v.update(time, selection?.kind === 'line' && selection.id === v.line.id, dt);
     updatePuffs(dt);

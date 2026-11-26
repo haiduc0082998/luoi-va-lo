@@ -6,13 +6,16 @@ import { createReactor, stepReactor } from './physics/reactor.js';
 import { rollEngineer, runEngineer } from './engineers.js';
 import { buildable, PADS } from './map.js';
 import { fmt } from './util.js';
+import { news } from './news.js';
+import { applyTech, netParams, politicsStep, spotPrice, retailEffective, rpPerDay, has } from './policy.js';
 
 export const START_HOUR = 8;
 export const PRICE_USD_MWH = 60;
 export const COAL_USD_MWH = 35;
 export const COAL_MAX = 600;
 // Giá xây dựng đã thu nhỏ cho nhịp chơi nhanh (triệu USD); giá điện giữ thật.
-export const LINE_COST_KM = { 10.5: 0.01, 110: 0.03, 220: 0.05, 500: 0.1 }; // ở 400 mm²
+export const LINE_COST_KM = { 10.5: 0.01, 110: 0.03, 220: 0.05, 500: 0.1, 750: 0.15 }; // ở 400 mm²
+export const HYDRO_MAX = 250;
 export const SUB_COST = 2, GACHA_COST = 1.5, INSPECT_COST = 1, PRINT_AMOUNT = 5, NODE_REPAIR = 1;
 
 const WORLD_NEWS = [
@@ -32,6 +35,8 @@ const INITIAL_NODES = [
   { id: 'subW', name: 'Trạm Tây', type: 'sub', x: -28, z: 24 },
   { id: 'capital', name: 'Thủ phủ', type: 'city', x: 58, z: 24, demandBase: 560 },
   { id: 'port', name: 'Bến Cảng', type: 'city', x: -46, z: 58, demandBase: 260 },
+  { id: 'hydro', name: 'Thủy điện Sông Lam', type: 'hydro', x: -12.8, z: -8 },
+  { id: 'border', name: 'Cửa khẩu Đông (nước láng giềng)', type: 'border', x: 104, z: -14 },
 ];
 const INITIAL_LINES = [
   { a: 'nuc', b: 'subE', kv: 500, A: 630 },
@@ -39,8 +44,9 @@ const INITIAL_LINES = [
   { a: 'subE', b: 'capital', kv: 500, A: 630 },
   { a: 'subW', b: 'port', kv: 220, A: 630 },
   { a: 'subW', b: 'subE', kv: 220, A: 400 },
+  { a: 'hydro', b: 'subW', kv: 220, A: 400 },
 ];
-for (const n of INITIAL_NODES) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : 9]);
+for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : 9]);
 
 export function createGame() {
   const nodes = INITIAL_NODES.map((n) => createNode(n));
@@ -51,6 +57,11 @@ export function createGame() {
     news: [], listeners: new Set(), protest: false, newsAcc: 0, engAcc: 0,
     net: { nodes, lines }, reactor: createReactor(), coalMax: COAL_MAX, gridFault: false, wasOffsite: true,
     engineer: null, engAuto: true, version: 1, subCount: 2,
+    // Giai đoạn 5
+    market: { retail: 60, contractMW: 200, exportOn: false, sanctionUntil: 0, pressureAt: 0 },
+    reputation: 60, factions: { business: 55, military: 55 },
+    decrees: { subsidy: false, monopoly: false, defense: false, martial: false },
+    tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
   };
 }
 
@@ -72,11 +83,7 @@ export function demandMul(hour, Ta) {
   return (day + evening) * (1 + Math.max(0, Ta - 30) * 0.012);
 }
 
-export function news(G, text, level = '') {
-  G.news.unshift({ t: G.t, text, level });
-  G.news.length = Math.min(G.news.length, 8);
-  G.listeners.forEach((fn) => fn(G.news));
-}
+export { news };
 const spend = (G, cost, what) => {
   if (cost > G.budget) { news(G, `Không đủ ngân sách cho ${what} (cần ${fmt(cost, 1)} triệu USD).`, 'warn'); return false; }
   G.budget -= cost; return true;
@@ -113,23 +120,31 @@ function nuclearWant(G) {
 
 function politics(G, dt) {
   const h = dt / 3600, day = dt / 86400, S = G.net.summary, R = G.reactor;
-  const sold = S.served;
-  const coalGen = nodeById(G, 'coal').gen;
-  G.budget += (sold * PRICE_USD_MWH * G.priceLevel * h * (1 - G.corruption / 200)) / 1e6;
-  G.budget -= (coalGen * COAL_USD_MWH * G.priceLevel * h) / 1e6;
+  const border = nodeById(G, 'border'), port = nodeById(G, 'port');
+  const domestic = G.net.nodes.filter((n) => n.type === 'city').reduce((s2, n) => s2 + n.served, 0);
+  const coalGen = nodeById(G, 'coal').gen, sanction = G.market.sanctionUntil > G.t;
+  const b0 = G.budget;
+  G.budget += (domestic * retailEffective(G) * (G.decrees.monopoly ? 1.15 : 1) * G.priceLevel * h * (1 - G.corruption / 200)) / 1e6;
+  G.budget += (border.served * spotPrice(G, hourOfDay(G)) * G.priceLevel * h) / 1e6;
+  G.budget -= (coalGen * COAL_USD_MWH * (sanction ? 1.3 : 1) * G.priceLevel * h) / 1e6;
   if (G.engineer) G.budget -= G.engineer.salary * G.priceLevel * day;
+  G.budget -= (G.researchBudget + (G.decrees.defense ? 0.25 : 0)) * G.priceLevel * day;
+  G.rp += rpPerDay(G) * day;
+  G.profitPerH += ((G.budget - b0) / h - G.profitPerH) * Math.min(1, dt / 3600);
 
-  const fw = S.demand > 0 ? S.served / S.demand : 1;
+  const cityDem = G.net.nodes.filter((n) => n.type === 'city').reduce((s2, n) => s2 + n.demand, 0);
+  const fw = cityDem > 0 ? domestic / cityDem : 1;
   G.inflation += ((2 - G.inflation) * day) / 3 + (1 - fw) * 0.5 * day;
   G.priceLevel *= 1 + (G.inflation / 100) * (day / 5);
-  G.corruption = Math.min(80, G.corruption + 0.5 * day);
+  G.corruption = Math.min(80, G.corruption + 0.5 * day * (has(G, 'audit') ? 0.5 : 1) * (G.decrees.monopoly ? 2 : 1));
 
   let dA = fw > 0.999 ? (G.approval < 85 ? 2 : 0) : -14 * (1 - fw);
   dA -= R.release * 25;
   if (G.inflation > 6) dA -= (G.inflation - 6) * 0.4;
   if (G.corruption > 35) dA -= (G.corruption - 35) * 0.05;
   G.approval = Math.max(0, Math.min(100, G.approval + dA * h));
-  if (G.approval < 25 && !G.protest) {
+  politicsStep(G, dt, { secFrac: fw, portFrac: port.demand > 0 ? port.frac : 1, profitPerH: G.profitPerH, exportFrac: border.demand > 0 ? border.frac : 1 });
+  if (G.approval < 25 && !G.protest && !G.decrees.martial) {
     G.protest = true;
     news(G, 'Biểu tình lan rộng: người dân đòi chính phủ chịu trách nhiệm về điện, giá cả và an toàn.', 'bad');
   }
@@ -140,19 +155,26 @@ function politics(G, dt) {
 
 /** Tiến thời gian thực dtReal giây, chia bước 0,05 s. */
 export function advance(G, dtReal) {
+  if (G.over) return;
   const total = dtReal * G.speed, n = Math.ceil(total / 0.05);
-  const R = G.reactor;
+  const R0 = G.reactor;
+  void R0;
   for (let i = 0; i < n; i++) {
     const h = total / n;
-    const nuc = nodeById(G, 'nuc'), coal = nodeById(G, 'coal');
-    const cap = { nuc: nuc.state === 'ok' ? R.Pe / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0 };
-    stepNetwork(G.net, h, { cap, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta }, (t, d) => netEvent(G, t, d));
+    const R = G.reactor;
+    applyTech(G);
+    const nuc = nodeById(G, 'nuc'), coal = nodeById(G, 'coal'), hyd = nodeById(G, 'hydro');
+    const cap = { nuc: nuc.state === 'ok' ? R.Pe / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX : 0 };
+    const exportMW = G.market.exportOn ? G.market.contractMW : 0;
+    stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, ...netParams(G) }, (t, d) => netEvent(G, t, d));
+    if (has(G, 'smartsub') || has(G, 'dispatchAI')) autoReclose(G, h);
     R.offsite = !G.gridFault && nuc.state === 'ok' && connectedToOtherSource(G.net, 'nuc');
     if (R.offsite !== G.wasOffsite) {
       G.wasOffsite = R.offsite;
       news(G, R.offsite ? 'Nhà máy hạt nhân có lại điện lưới ngoài.' : 'Nhà máy hạt nhân mất điện lưới ngoài! Bơm cần máy phát diesel.', R.offsite ? '' : 'bad');
     }
     stepReactor(R, h, (t) => reactorEvent(G, t));
+    if (G.over) { news(G, G.over, 'bad'); break; }
     if (G.engineer && G.engAuto) {
       G.engAcc += h;
       if (G.engAcc >= 1) { G.engAcc = 0; runEngineer(G.engineer, R, nuclearWant(G), Math.random, (txt, lvl) => news(G, txt, lvl)); }
@@ -163,7 +185,8 @@ export function advance(G, dtReal) {
 }
 
 // ---------- Hành động của người chơi ----------
-export const lineCost = (G, L, kv, A) => L * LINE_COST_KM[kv] * Math.sqrt(A / 400) * costMul(G);
+export const lineCost = (G, L, kv, A, sc = false) => L * LINE_COST_KM[kv] * Math.sqrt(A / 400) * costMul(G) * (sc ? 4 : 1);
+export const gachaCost = (G) => GACHA_COST * G.priceLevel * (has(G, 'academy') ? 0.5 : 1);
 export const subCost = (G) => SUB_COST * costMul(G);
 
 export function buildSubstation(G, x, z) {
@@ -176,17 +199,17 @@ export function buildSubstation(G, x, z) {
   return n;
 }
 
-export function buildLine(G, aId, bId, kv, A) {
+export function buildLine(G, aId, bId, kv, A, sc = false) {
   if (aId === bId) return null;
   if (G.net.lines.some((l) => (l.a === aId && l.b === bId) || (l.a === bId && l.b === aId))) {
     news(G, 'Hai công trình này đã có đường dây nối với nhau.', 'warn'); return null;
   }
-  const a = nodeById(G, aId), b = nodeById(G, bId), L = lineLengthKm(a, b), cost = lineCost(G, L, kv, A);
+  const a = nodeById(G, aId), b = nodeById(G, bId), L = lineLengthKm(a, b), cost = lineCost(G, L, kv, A, sc);
   if (!spend(G, cost, 'đường dây')) return null;
-  const quality = 1 + (0.6 * G.corruption) / 100;
-  const l = createLine({ a: aId, b: bId, kv, A, L, quality, Tw: G.Ta });
+  const quality = sc ? 0.02 : 1 + (0.6 * G.corruption) / 100;
+  const l = createLine({ a: aId, b: bId, kv, A, L, quality, Tw: G.Ta, sc });
   G.net.lines.push(l); G.version++;
-  news(G, `Đã kéo tuyến ${a.name} – ${b.name}: ${fmt(L)} km, ${fmt(kv, kv === 10.5 ? 1 : 0)} kV, ${A} mm² (−${fmt(cost, 1)} triệu USD).${quality > 1.05 ? ` Tham nhũng làm điện trở cao hơn thiết kế ${fmt((quality - 1) * 100)}%.` : ''}`);
+  news(G, `Đã kéo tuyến ${sc ? 'siêu dẫn ' : ''}${a.name} – ${b.name}: ${fmt(L)} km, ${fmt(kv, kv === 10.5 ? 1 : 0)} kV, ${A} mm² (−${fmt(cost, 1)} triệu USD).${quality > 1.05 ? ` Tham nhũng làm điện trở cao hơn thiết kế ${fmt((quality - 1) * 100)}%.` : ''}`);
   return l;
 }
 
@@ -195,6 +218,15 @@ export function skipDayNight(G) {
   const h = hourOfDay(G), target = h >= 7 && h < 20 ? 20 : 7;
   G.t += ((target - h + 24) % 24) * 3600;
   news(G, target === 20 ? 'Tua nhanh tới 20:00: giờ cao điểm buổi tối, thành phố lên đèn.' : 'Tua nhanh tới 07:00 sáng.');
+}
+
+/** Tự đóng lại máy cắt sau 2 phút khi dây đã nguội (trạm thông minh / AI điều độ). */
+function autoReclose(G, dt) {
+  for (const l of G.net.lines) {
+    if (l.state !== 'tripped' && l.state !== 'collapse') { l.wait = 0; continue; }
+    l.wait = (l.wait || 0) + dt;
+    if (l.wait > 120 && l.Tw < 70) { l.state = 'ok'; l.trip = 0; l.wait = 0; news(G, `Tự động đóng lại tuyến ${nodeById(G, l.a).name} – ${nodeById(G, l.b).name}.`); }
+  }
 }
 
 export function demolishLine(G, id) {
@@ -221,8 +253,8 @@ export function repairNode(G, id) {
 }
 
 export function gacha(G) {
-  if (!spend(G, GACHA_COST * G.priceLevel, 'tuyển kỹ sư')) return;
-  G.engineer = rollEngineer(G.corruption);
+  if (!spend(G, gachaCost(G), 'tuyển kỹ sư')) return;
+  G.engineer = rollEngineer(has(G, 'academy') ? -60 : G.corruption);
   const msg = { fake: ['Tuyển nhầm kỹ sư thiếu kinh nghiệm! Coi chừng họ bấm SCRAM bừa.', 'warn'],
     rare: ['Đã thuê chuyên gia quốc tế tiếp quản phòng điều khiển.', ''],
     legend: ['Chiêu mộ được Tiến sĩ hạt nhân – huyền thoại vận hành lò!', ''] }[G.engineer.tier];
