@@ -16,6 +16,7 @@ import { fmt } from './util.js';
 import * as Save from './save.js';
 import { createAudio } from './audio.js';
 import { createGameBar } from './ui/gamebar.js';
+import { createDrawers } from './ui/drawers.js';
 
 const { G, loaded } = Save.boot();
 const canvas = document.getElementById('scene');
@@ -32,6 +33,9 @@ app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 app.setCanvasFillMode(pc.FILLMODE_NONE);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
 const fit = () => app.resizeCanvas(stage.clientWidth, stage.clientHeight);
+// Chiều cao thanh chỉ số (đổi khi xoay máy / mở thêm chỉ số): các cửa sổ trượt bắt đầu ngay dưới nó
+const topBar = document.querySelector('.top');
+new ResizeObserver(() => document.documentElement.style.setProperty('--topH', `${topBar.offsetHeight}px`)).observe(topBar);
 new ResizeObserver(fit).observe(stage);
 fit();
 
@@ -72,7 +76,9 @@ function enterCity(id) {
   camera.focus(ORIGIN.x, 0, ORIGIN.z, 150, 35, 40); camera.jump();
   document.body.classList.add('in-city');
   cityPanel.ui.tool = 'look'; cityPanel.ui.lot = null; cityPanel.show(true);
-  stage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  drawers.close();
+  document.getElementById('cityPanel').classList.remove('collapsed');
+  document.getElementById('cityToggle').setAttribute('aria-pressed', 'true');
 }
 function exitCity() {
   const C = G.cities[cityId];
@@ -147,6 +153,21 @@ hud = createHud(G, {
 const s5 = createStage5(G);
 const audio = createAudio(G);
 const bar = createGameBar(G, audio, { loaded });
+const drawers = createDrawers(G);
+// Chọn một công trình / tuyến dây trên bản đồ thì mở cửa sổ Công trình bên cạnh
+const selectRaw = hud.select;
+hud.select = (s) => { selectRaw(s); if (s && !cityId) drawers.open('insp'); };
+// Thanh chỉ số: trên màn hẹp chỉ hiện chỉ số chính, bấm "Thêm chỉ số" để mở hết
+document.getElementById('statMore').addEventListener('click', (e) => {
+  const on = document.getElementById('stat').classList.toggle('expanded');
+  e.currentTarget.setAttribute('aria-expanded', String(on));
+  e.currentTarget.textContent = on ? 'Thu gọn' : 'Thêm chỉ số';
+});
+// Trong thành phố: nút "Thành phố" trên thanh bên thu/mở bảng thành phố
+document.getElementById('cityToggle').addEventListener('click', (e) => {
+  const collapsed = document.getElementById('cityPanel').classList.toggle('collapsed');
+  e.currentTarget.setAttribute('aria-pressed', String(!collapsed));
+});
 cityPanel = createCityPanel(G, { onExit: exitCity });
 cityPanel.show(false);
 hud.onEnterCity = enterCity;
@@ -208,7 +229,7 @@ window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === ' ') { e.preventDefault(); if (G.speed) { lastSpeed = G.speed; G.speed = 0; } else G.speed = lastSpeed; hud.syncSegs(); }
   else if (SPEEDS[k]) { G.speed = SPEEDS[k]; hud.syncSegs(); }
-  else if (k === 'escape') { if (cityId) exitCity(); else setTool('select'); bar.toggleKeys(false); }
+  else if (k === 'escape') { if (drawers.current) drawers.close(); else if (cityId) exitCity(); else setTool('select'); bar.toggleKeys(false); }
   else if (cityId) return;
   else if (k === 'q') setTool('select');
   else if (k === 'l') setTool('line');

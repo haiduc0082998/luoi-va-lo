@@ -2,51 +2,60 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1f1d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Lưới &amp; Lò</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Be+Vietnam+Pro:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
+<div class="stage" id="stage">
+  <canvas id="scene" aria-label="Bản đồ 3D lưới điện quốc gia"></canvas>
+  <div class="buildmenu" id="buildMenu" hidden></div>
+  <aside class="citypanel" id="cityPanel" hidden></aside>
+  <p class="modehint" id="modeHint"></p>
+  <p class="hint"><span class="h-mouse">Bấm để chọn · kéo trái để xoay · kéo phải hoặc Shift + kéo để di chuyển · cuộn để thu phóng</span><span class="h-touch">Chạm để chọn · kéo một ngón để xoay · hai ngón để di chuyển và thu phóng</span></p>
+  <p class="nogl" id="noGL" hidden>Trình duyệt này không chạy được WebGL nên không hiển thị bản đồ 3D. Các bảng ở cạnh phải vẫn hoạt động.</p>
+</div>
+
 <header class="top">
-  <h1>Lưới &amp; Lò<small>Chiến lược năng lượng · Giai đoạn 7</small></h1>
-  <div class="stat">
+  <h1>Lưới &amp; Lò<small>Chiến lược năng lượng · Giai đoạn 8</small></h1>
+  <div class="stat" id="stat">
     <div>Thời gian<b id="clock">Ngày 1, 08:00</b></div>
-    <div>Tốc độ<div class="seg" id="speed"></div></div>
+    <div class="spd">Tốc độ<div class="seg" id="speed"></div></div>
     <div>Ngân sách<b id="budget"></b></div>
     <div>Lòng dân <span id="apV"></span><div class="meter"><i id="apBar"></i></div></div>
-    <div>An ninh năng lượng<b id="sec"></b></div>
     <div>Tần số<b id="hz"></b></div>
-    <div>Lạm phát<b id="infl"></b></div>
-    <div>Tham nhũng<b id="corr"></b></div>
-    <div>Uy tín<b id="rep"></b></div>
-    <div>Thời tiết<b id="wx"></b></div>
-    <div>Tài nguyên<b id="resU"></b></div>
+    <div class="more">An ninh năng lượng<b id="sec"></b></div>
+    <div class="more">Lạm phát<b id="infl"></b></div>
+    <div class="more">Tham nhũng<b id="corr"></b></div>
+    <div class="more">Uy tín<b id="rep"></b></div>
+    <div class="more">Thời tiết<b id="wx"></b></div>
+    <div class="more">Tài nguyên<b id="resU"></b></div>
+    <button class="btn statmore" id="statMore" type="button" aria-expanded="false" aria-controls="stat">Thêm chỉ số</button>
   </div>
-  <div class="gamebar" id="gamebar" aria-label="Ván chơi"></div>
+  <div class="ticker"><div class="track" id="track"></div></div>
 </header>
-<div class="ticker"><div class="track" id="track"></div></div>
 
-<div class="band">
-  <div class="stage" id="stage">
-    <canvas id="scene" aria-label="Bản đồ 3D lưới điện quốc gia"></canvas>
-    <div class="toolbar">
-      <div class="seg" id="tools"></div>
-      <div class="seg" id="views"></div>
-      <button class="btn" id="weatherBtn" type="button">Thời tiết</button>
-      <button class="btn" id="skipDN" type="button">Tua tới tối</button>
-      <button class="btn" id="quality" type="button">Đồ hoạ: cao</button>
-    </div>
-    <div class="buildmenu" id="buildMenu" hidden></div>
-    <aside class="citypanel" id="cityPanel" hidden></aside>
-    <p class="modehint" id="modeHint"></p>
-    <p class="hint">Bấm để chọn · kéo trái để xoay · kéo phải hoặc Shift + kéo để di chuyển · cuộn để thu phóng</p>
-    <p class="nogl" id="noGL" hidden>Trình duyệt này không chạy được WebGL nên không hiển thị bản đồ 3D. Các bảng bên dưới vẫn hoạt động.</p>
-  </div>
+<div class="dock">
+  <div class="seg" id="tools"></div>
+</div>
 
-  <div class="deck">
-    <section class="panel">
-      <h2>Lưới quốc gia</h2>
+<nav class="rail" id="rail" aria-label="Các bảng điều khiển">
+  <button type="button" data-open="grid"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Lưới</span></button>
+  <button type="button" data-open="insp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V8l8-5 8 5v13h-6v-6h-4v6z"/></svg><span>Công trình</span></button>
+  <button type="button" data-open="nation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V3m0 1h12l-2 4 2 4H5"/></svg><span>Quốc gia</span></button>
+  <button type="button" data-open="gov"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m6 10V4m6 16v-8m-14 8h18"/></svg><span>Điều hành</span></button>
+  <button type="button" data-open="map"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14m6-12v14"/></svg><span>Bản đồ</span></button>
+  <button type="button" data-open="game"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v6h8V3M8 21v-7h8v7"/></svg><span>Ván chơi</span></button>
+  <button type="button" class="city-only" id="cityToggle" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21V9h6v12M9 21V3h8v18m-14 0h18M12 7h2m-2 4h2m-2 4h2"/></svg><span>Thành phố</span></button>
+</nav>
+
+<aside class="drawer" id="dr-grid" aria-label="Lưới quốc gia" hidden>
+  <div class="dhead"><h2>Lưới quốc gia</h2><button class="x" type="button" data-close aria-label="Đóng">×</button></div>
+      <section class="panel">
       <dl class="mini">
         <div><dt>Nhu cầu / được cấp</dt><dd id="gDem"></dd></div>
         <div><dt>Phát điện (hạt nhân + nhiệt điện)</dt><dd id="gGen"></dd></div>
@@ -59,11 +68,14 @@
       <p class="lab sp">Các tuyến (bấm để chọn)</p>
       <div class="scroll"><table class="lines"><thead><tr><th>Tuyến</th><th>MW</th><th>A</th><th>°C</th></tr></thead><tbody id="lineRows"></tbody></table></div>
     </section>
-
-    <section class="panel" id="inspector"></section>
-
-    <section class="panel">
-      <h2>Quốc gia</h2>
+</aside>
+<aside class="drawer" id="dr-insp" aria-label="Công trình đang chọn" hidden>
+  <div class="dhead"><h2>Công trình</h2><button class="x" type="button" data-close aria-label="Đóng">×</button></div>
+  <section class="panel" id="inspector"></section>
+</aside>
+<aside class="drawer" id="dr-nation" aria-label="Quốc gia" hidden>
+  <div class="dhead"><h2>Quốc gia</h2><button class="x" type="button" data-close aria-label="Đóng">×</button></div>
+      <section class="panel">
       <div class="eng" id="engCard"></div>
       <div class="btns">
         <button class="btn" id="gacha" type="button"></button>
@@ -77,10 +89,29 @@
       <p class="lab sp">Kịch bản</p><div class="btns" id="scenarios"></div>
       <p class="lab sp">Bản tin</p><ol class="log" id="log"></ol>
     </section>
-  </div>
+</aside>
+<aside class="drawer wide" id="dr-gov" aria-label="Điều hành quốc gia" hidden>
+  <div class="dhead"><h2>Điều hành</h2><button class="x" type="button" data-close aria-label="Đóng">×</button></div>
   <section class="panel s5" id="s5"></section>
-  <p class="note">Mô hình đã đơn giản hoá cho trò chơi: lưới tính theo phân bố công suất một chiều, dòng điện một pha tương đương. Các con số đúng bậc độ lớn, không dùng để thiết kế thật.</p>
-</div>
+</aside>
+<aside class="drawer" id="dr-map" aria-label="Bản đồ và hiển thị" hidden>
+  <div class="dhead"><h2>Bản đồ</h2><button class="x" type="button" data-close aria-label="Đóng">×</button></div>
+  <section class="panel">
+    <p class="lab">Góc nhìn</p><div class="seg" id="views"></div>
+    <p class="lab sp">Thời tiết và thời gian</p>
+    <div class="btns"><button class="btn" id="weatherBtn" type="button">Thời tiết</button><button class="btn" id="skipDN" type="button">Tua tới tối</button></div>
+    <p class="lab sp">Đồ hoạ</p>
+    <div class="btns"><button class="btn" id="quality" type="button">Đồ hoạ: cao</button></div>
+    <p class="note">Đồ hoạ thấp tắt bóng đổ nhiều tầng, SSAO và khử răng cưa: nên chọn trên điện thoại yếu hoặc khi máy nóng.</p>
+  </section>
+</aside>
+<aside class="drawer" id="dr-game" aria-label="Ván chơi" hidden>
+  <div class="dhead"><h2>Ván chơi</h2><button class="x" type="button" data-close aria-label="Đóng">×</button></div>
+  <section class="panel">
+    <div class="gamebar" id="gamebar" aria-label="Ván chơi"></div>
+    <p class="note sp">Mô hình đã đơn giản hoá cho trò chơi: lưới tính theo phân bố công suất một chiều, dòng điện một pha tương đương. Các con số đúng bậc độ lớn, không dùng để thiết kế thật.</p>
+  </section>
+</aside>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

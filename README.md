@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–7)
+## Có gì trong bản này (Giai đoạn 1–8)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -116,6 +116,19 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 - **12 nhiệm vụ có thưởng** (tab Nhiệm vụ): lưới ổn định 24 giờ, không ai thiếu điện, điện gió, xuất khẩu, metro đầu tiên, tổ máy 2, láng giềng hữu hảo… Nhiệm vụ "suốt X giờ" phải giữ điều kiện liên tục.
 - **Phím tắt:** Space dừng/chạy, 1–4 đổi tốc độ, Q/L/B/X đổi công cụ, Esc huỷ hoặc rời thành phố, M tắt âm thanh, ? xem bảng phím.
 
+**Giai đoạn 8: bản đồ toàn màn hình, tối ưu điện thoại**
+- **Màn hình chính chỉ còn bản đồ 3D.** Phía trên là dải chỉ số mờ trong suốt; trên điện thoại chỉ hiện giờ, tốc độ, ngân sách, lòng dân, tần số, bấm "Thêm chỉ số" để xem hết.
+- **Thanh nút bên phải** mở các cửa sổ trượt ra cạnh bản đồ: Lưới, Công trình, Quốc gia, Điều hành, Bản đồ, Ván chơi.
+  - Mỗi lúc mở một cửa sổ; bấm lại nút, nút ×, phím Esc, hoặc vuốt sang phải để đóng.
+  - Chọn một công trình trên bản đồ thì cửa sổ Công trình tự mở.
+  - Nút Quốc gia có chấm đỏ khi bản tin có cảnh báo chưa xem.
+- **Công cụ** (Chọn, Xây dựng, Kéo dây, Bán) nằm ở góc dưới, vừa tầm ngón cái.
+- **Trong thành phố:** thanh bên chỉ còn nút "Thành phố" để thu hoặc mở bảng thành phố.
+- **Hỗ trợ điện thoại:**
+  - Xoay ngang: chỉ số gom một hàng, nút chỉ còn biểu tượng.
+  - Chừa vùng tai thỏ và thanh home (safe area).
+  - Nút cao ít nhất 44 px; hướng dẫn thao tác riêng cho màn hình cảm ứng.
+
 ## Cấu trúc mã
 
 ```
@@ -140,6 +153,7 @@ src/
   ui/hud.js            thanh chỉ số, bảng thanh tra, bảng quốc gia
   ui/stage5.js         bảng Thị trường · Chính trị · Cây công nghệ · Nhiệm vụ, màn hình thua
   ui/gamebar.js        thanh ván chơi: lưu, tải, ván mới, âm thanh, phím tắt, tự lưu
+  ui/drawers.js        thanh nút bên phải và các cửa sổ trượt (mở/đóng, vuốt để đóng, chấm báo)
   save.js              lưu / tải ván vào localStorage (giữ Set, getter, số vô cực)
   missions.js          nhiệm vụ và phần thưởng
   audio.js             âm thanh tổng hợp bằng WebAudio
