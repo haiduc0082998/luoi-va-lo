@@ -54,12 +54,12 @@ export function createCityView(app, M) {
     res(x, z, l, r) {
       const n = 2 + Math.floor(r() * 3);
       for (let k = 0; k < n; k++) {
-        const w = 3 + r() * 1.5, h = 4 + l.h * 14 * (0.6 + r() * 0.6), dx = ((k % 2) - 0.5) * 5, dz = (Math.floor(k / 2) - 0.5) * 5;
+        const w = 3 + r() * 1.5, h = (4 + l.h * 14 * (0.6 + r() * 0.6)) * hMul, dx = ((k % 2) - 0.5) * 5, dz = (Math.floor(k / 2) - 0.5) * 5;
         box([x + dx, h / 2 + 0.24, z + dz], [w, h, w], K.house);
       }
     },
     com(x, z, l, r) {
-      const h = 14 + l.h * 40 * (0.7 + r() * 0.5);
+      const h = (14 + l.h * 40 * (0.7 + r() * 0.5)) * hMul;
       box([x, h / 2 + 0.24, z], [7, h, 7], K.tower);
       box([x, h + 0.7, z], [4, 1.2, 4], M.metal);
       if (r() < 0.5) box([x + 3, 3, z + 3], [4, 6, 4], K.glass);
@@ -90,6 +90,19 @@ export function createCityView(app, M) {
       for (let k = 0; k < 5; k++) { const tx = x + (r() - 0.5) * 8, tz = z + (r() - 0.5) * 8; ent(lotsRoot, 'cone', [tx, 2.2, tz], [2, 3.4, 2], M.leaf); ent(lotsRoot, 'cylinder', [tx, 0.6, tz], [0.3, 1.2, 0.3], M.trunk); }
       lamp(lotsRoot, x - 4, 0.2, z - 4, M);
     },
+    bank(x, z) { // ngân hàng: nhà cột kiểu cổ điển, mái vàng
+      box([x, 0.6, z], [10, 1.2, 8], K.white);
+      box([x, 4.6, z - 0.6], [8.6, 6.8, 5.6], K.white);
+      for (let k = -3; k <= 3; k += 1.5) ent(lotsRoot, 'cylinder', [x + k, 4.4, z + 2.8], [0.6, 6.4, 0.6], K.white);
+      box([x, 8.2, z + 0.4], [9.6, 0.6, 7.6], K.yellow); box([x, 9, z + 0.4], [7, 1, 5.5], K.yellow);
+      box([x, 1.6, z + 3.9], [2, 2, 0.1], K.glass, false);
+    },
+    tv(x, z) { // đài truyền hình: toà nhà + tháp ăng-ten sọc đỏ trắng, đèn đỉnh nhấp nháy
+      box([x - 2, 3, z + 1.5], [6, 6, 6], K.blue); box([x - 2, 6.2, z + 1.5], [6.2, 0.4, 6.2], M.metal);
+      for (let k = 0; k < 8; k++) ent(lotsRoot, 'cylinder', [x + 3, 2 + k * 3.6, z - 3], [1.4 - k * 0.12, 3.6, 1.4 - k * 0.12], k % 2 ? K.white : K.red);
+      ent(lotsRoot, 'sphere', [x + 3, 31, z - 3], [1, 1, 1], K.red, false);
+      ent(lotsRoot, 'cylinder', [x - 2, 7.4, z + 1.5], [3, 0.3, 3], M.metal);
+    },
     station(x, z) {
       box([x, 1.5, z + 3], [4, 3, 3], K.glass); box([x, 3.2, z + 3], [4.4, 0.3, 3.4], M.metal);
       for (const dx of [-4, 4]) ent(lotsRoot, 'cylinder', [x + dx, 3.5, z], [0.6, 7, 0.6], K.track);
@@ -97,6 +110,7 @@ export function createCityView(app, M) {
     },
   };
 
+  let hMul = 1;
   function rebuild(C) {
     lotsRoot?.destroy(); metroRoot?.destroy();
     lotsRoot = new pc.Entity(); root.addChild(lotsRoot);
@@ -158,7 +172,11 @@ export function createCityView(app, M) {
   let current = null, version = -1;
   function update(G, C, dt, day) {
     if (!root.enabled) return;
-    if (C !== current || G.cityVersion !== version) { current = C; version = G.cityVersion; rebuild(C); }
+    if (C !== current || G.cityVersion !== version) {
+      current = C; version = G.cityVersion;
+      hMul = 1 + 0.25 * ((G.net.nodes.find((x) => x.id === C.id)?.lv ?? 1) - 1); // thành phố nâng cấp: nhà cao hơn
+      rebuild(C);
+    }
     const lit = (G.net.nodes.find((n) => n.id === C.id)?.frac ?? 0);
     K.house.emissiveIntensity = lit * (0.2 + 1.5 * (1 - day)); K.house.update();
     K.tower.emissiveIntensity = lit * (0.3 + 1.6 * (1 - day)); K.tower.update();

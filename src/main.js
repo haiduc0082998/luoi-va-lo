@@ -17,6 +17,7 @@ import * as Save from './save.js';
 import { createAudio } from './audio.js';
 import { createGameBar } from './ui/gamebar.js';
 import { createDrawers } from './ui/drawers.js';
+import { createExtras } from './ui/extras.js';
 
 const { G, loaded } = Save.boot();
 const canvas = document.getElementById('scene');
@@ -85,7 +86,7 @@ function exitCity() {
   if (C?.draft) City.finishLine(G, C);
   const n = Game.nodeById(G, cityId);
   cityId = null; world.setMode('nation'); world.cityView.setGhost(null);
-  camera.setBounds(0, 0, 120);
+  camera.setBounds(0, 0, 190);
   camera.focus(n.x, 4, n.z, 90, 30, 32); camera.jump();
   document.body.classList.remove('in-city');
   cityPanel.show(false);
@@ -154,6 +155,7 @@ const s5 = createStage5(G);
 const audio = createAudio(G);
 const bar = createGameBar(G, audio, { loaded });
 const drawers = createDrawers(G);
+const extras = createExtras(G, drawers);
 // Chọn một công trình / tuyến dây trên bản đồ thì mở cửa sổ Công trình bên cạnh
 const selectRaw = hud.select;
 hud.select = (s) => { selectRaw(s); if (s && !cityId) drawers.open('insp'); };
@@ -217,6 +219,7 @@ app.on('update', (dt) => {
   s5.render();
   audio.update();
   bar.update();
+  extras.render(dtReal);
 });
 
 // ---------- Phím tắt ----------
@@ -242,6 +245,6 @@ window.addEventListener('keydown', (e) => {
 if (!loaded) Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai trạm, hai thành phố và cửa khẩu sang nước láng giềng đang chờ lệnh. Bấm vào công trình để điều khiển.');
 setTool('select');
 app.start();
-window.__game = G; // để kiểm thử và gỡ lỗi
+window.__game = G; window.__world = world; // để kiểm thử và gỡ lỗi
 window.__enterCity = enterCity;
 window.__build = (type, x, z) => Infra.build(G, type, x, z);

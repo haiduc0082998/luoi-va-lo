@@ -1,9 +1,9 @@
 // Địa hình low-poly (đổ bóng phẳng, tô màu theo độ cao) và mặt nước sông.
 import * as pc from 'playcanvas';
-import { height, MAP_HALF, WATER_Y } from '../map.js';
+import { height, MAP_HALF, WATER_Y, BORDER_X } from '../map.js';
 import { seeded } from '../rng.js';
 
-const STEPS = 72;
+const STEPS = 112; // bản đồ 380 × 380: mỗi ô ~3,4 đơn vị như trước
 
 function colorFor(y, slope) {
   if (y < -1.4) return [176, 160, 120];                   // lòng sông cát
@@ -23,7 +23,9 @@ export function buildTerrain(app, parent) {
     b.set(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
     n.cross(a, b).normalize();
     if (n.y < 0) n.mulScalar(-1);
-    const y = (p0[1] + p1[1] + p2[1]) / 3, c = colorFor(y, 1 - n.y);
+    const y = (p0[1] + p1[1] + p2[1]) / 3, c0 = colorFor(y, 1 - n.y);
+    // Đất nước láng giềng (bên kia biên giới) tô ngả vàng khô để dễ phân biệt
+    const c = (p0[0] + p1[0] + p2[0]) / 3 > BORDER_X ? [Math.min(255, c0[0] + 34), Math.min(255, c0[1] + 14), Math.max(0, c0[2] - 8)] : c0;
     for (const p of [p0, p1, p2]) { positions.push(...p); normals.push(n.x, n.y, n.z); colors.push(...c, 255); }
   };
   for (let i = 0; i < STEPS; i++) {

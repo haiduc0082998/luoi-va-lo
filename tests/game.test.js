@@ -22,7 +22,7 @@ test('xây trạm và kéo dây mới làm tăng số nút và tuyến', () => {
   assert.ok(s);
   assert.ok(buildLine(G, s.id, 'capital', 220, 400));
   assert.ok(buildLine(G, s.id, 'subW', 220, 400));
-  assert.equal(G.net.nodes.length, 10);
+  assert.equal(G.net.nodes.length, 12); // 11 công trình ban đầu (gồm Nam Bình, Tây Hải) + trạm mới
   runHours(G, 2);
   assert.ok(G.net.lines.at(-1).P !== 0);
 });

@@ -5,7 +5,7 @@ import { clamp, ramp, WIRE_RAMP, FUEL_RAMP } from '../util.js';
 import { RATED, outletTemp, dieselRunning } from '../physics/reactor.js';
 import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
-import { height, WATER_Y, buildable, riverCenter } from '../map.js';
+import { height, WATER_Y, buildable, riverCenter, MAP_HALF, BORDER_X } from '../map.js';
 import { buildTerrain, animateWater } from './terrain.js';
 import { createInfra } from './infra3d.js';
 import { createCityView } from './cityview.js';
@@ -352,18 +352,25 @@ export function buildWorld(app) {
       const tex = new pc.Texture(app.graphicsDevice, { width: 64, height: 128, mipmaps: true });
       tex.setSource(canvas);
       const m = mat('#5f6872'); m.emissiveMap = tex; m.emissive = col('#ffc861'); m.update();
-      const r = seeded(n.id), count = Math.round(4 + n.demandBase / 60);
-      const side = Math.ceil(Math.sqrt(count));
-      for (let i = 0; i < count; i++) {
-        const h = 6 + r() * (n.demandBase / 25);
-        const x = ((i % side) - (side - 1) / 2) * 5.2 + (r() - 0.5), z = (Math.floor(i / side) - (side - 1) / 2) * 5.6 + (r() - 0.5);
-        ent(g, 'box', [x, h / 2, z], [3.8 + r(), h, 4 + r()], m);
-      }
+      // Nhà cửa dựng lại khi thành phố được nâng cấp: nhiều toà hơn, cao hơn
+      let bld = null, builtLv = 0, side = 1;
+      const makeBuildings = () => {
+        bld?.destroy(); bld = new pc.Entity(); g.addChild(bld); builtLv = n.lv ?? 1;
+        const r = seeded(n.id), count = Math.round(4 + n.demandBase / 60), hk = 1 + 0.3 * (builtLv - 1);
+        side = Math.ceil(Math.sqrt(count));
+        for (let i = 0; i < count; i++) {
+          const h = (6 + r() * (n.demandBase / 25)) * hk;
+          const x = ((i % side) - (side - 1) / 2) * 5.2 + (r() - 0.5), z = (Math.floor(i / side) - (side - 1) / 2) * 5.6 + (r() - 0.5);
+          ent(bld, 'box', [x, h / 2, z], [3.8 + r(), h, 4 + r()], m);
+        }
+      };
+      makeBuildings();
       const glow = light(g, [0, 8, 0], '#ffc861', 34);
       const ring = side * 2.9 + 3;
       for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; lamp(g, Math.cos(a) * ring, 0, Math.sin(a) * ring, M); }
       const blaze = fire(g, [side * 2.6 + 2, 1, 0], 1, M);
       return (G, dt, t, day) => {
+        if ((n.lv ?? 1) !== builtLv) makeBuildings();
         const k = n.state === 'ok' ? n.frac : 0;
         m.emissiveIntensity = k * (0.25 + 1.6 * (1 - day)); m.update();
         glow.light.intensity = k * 2.5 * (1 - day);
@@ -484,6 +491,10 @@ export function buildWorld(app) {
 
   // ---------- Đồng bộ với dữ liệu lưới ----------
   const nodeViews = new Map(), lineViews = new Map();
+  // Bán kính bao của từng loại công trình (để kiểm tra có nằm trong khung nhìn không)
+  const VIEW_R = { nuclear: 48, city: 34, coal: 30, hydro: 34, sub: 14, border: 18, wind: 22, mine: 26 };
+  const cull = { shown: 0, hidden: 0 }, sph = new pc.BoundingSphere();
+  const inView = (fr, x, y, z, r) => { sph.center.set(x, y, z); sph.radius = r; return fr.containsSphere(sph) > 0; };
   // Lều lính gác + xe quân sự cạnh công trình được canh gác
   const makeGuard = (n) => {
     const r = PICK_RADIUS[n.type] * 0.7 + 3, x = n.x - r, z = n.z + r, y = groundY(x, z);
@@ -508,7 +519,8 @@ export function buildWorld(app) {
     for (const [id, v] of lineViews) if (!G.net.lines.some((l) => l.id === id)) { v.g.destroy(); lineViews.delete(id); }
     for (const l of G.net.lines) {
       if (lineViews.has(l.id)) continue;
-      lineViews.set(l.id, { ...buildLine(l, nodeById(G, l.a), nodeById(G, l.b)), line: l });
+      const a = nodeById(G, l.a), b = nodeById(G, l.b);
+      lineViews.set(l.id, { ...buildLine(l, a, b), line: l, half: Math.hypot(a.x - b.x, a.z - b.z) / 2 });
     }
   }
 
@@ -594,12 +606,24 @@ export function buildWorld(app) {
     stars.enabled = starMat.emissiveIntensity > 0.01;
     animateWater(time, G.windNow ?? 5);
     app.scene.fog.start = G.weather.id === 'storm' ? 90 : 200; app.scene.fog.end = G.weather.id === 'storm' ? 330 : 560;
-    infra.update(G, dt, day);
+    if (mode === 'nation') {
+      const fr0 = camera.camera.frustum;
+      cull.shown = 0; cull.hidden = 0;
+      infra.update(G, dt, day, (x, z, r) => inView(fr0, x, groundY(x, z) + 6, z, r), cull);
+    }
 
     M.bulb.emissiveIntensity = clamp((0.55 - day) * 5, 0, 2.5); M.bulb.update();
     if (cityId) cityView.update(G, G.cities[cityId], dt, day);
     if (mode !== 'nation') { updatePuffs(dt); return; }
-    for (const v of nodeViews.values()) { v.update(G, dt, time, day); if (v.guard) v.guard.enabled = G.world.guards.includes(v.node.id); }
+    // Ẩn vùng ngoài màn hình: công trình / tuyến dây không nằm trong khung nhìn thì tắt hẳn (không vẽ, không chạy
+    // hoạt cảnh). Logic game vẫn chạy đủ trong advance(); khi quay lại vùng đó, hàm update vẽ lại đúng trạng thái hiện tại.
+    const fr = camera.camera.frustum;
+    for (const v of nodeViews.values()) {
+      const on = inView(fr, v.node.x, groundY(v.node.x, v.node.z) + 8, v.node.z, VIEW_R[v.node.type] ?? 18);
+      if (v.g.enabled !== on) v.g.enabled = on;
+      if (v.guard) v.guard.enabled = on && G.world.guards.includes(v.node.id);
+      if (on) { v.update(G, dt, time, day); cull.shown++; } else cull.hidden++;
+    }
     // Tên lửa / phá hoại: chớp sáng tại điểm bị đánh
     const fx = G.world.strikeFx;
     if (fx.length > seenStrikes) {
@@ -608,7 +632,11 @@ export function buildWorld(app) {
       if (n) { strikeLight.setPosition(n.x, groundY(n.x, n.z) + 10, n.z); strikeT = 1; for (let i = 0; i < 6; i++) emit(n.x, groundY(n.x, n.z) + 2, n.z, '#3b3b3b', 5, 10); }
     }
     strikeT = Math.max(0, strikeT - dt * 0.6); strikeLight.light.intensity = strikeT * 12;
-    for (const v of lineViews.values()) v.update(time, selection?.kind === 'line' && selection.id === v.line.id, dt);
+    for (const v of lineViews.values()) {
+      const on = inView(fr, v.mid.x, v.mid.y, v.mid.z, v.half + 12);
+      if (v.g.enabled !== on) v.g.enabled = on;
+      if (on) { v.update(time, selection?.kind === 'line' && selection.id === v.line.id, dt); cull.shown++; } else cull.hidden++;
+    }
     updatePuffs(dt);
 
     marker.enabled = !!selection;
@@ -625,5 +653,17 @@ export function buildWorld(app) {
     }
   }
 
-  return { update, setGhost, lineViews, setQuality, infraViews: infra.views, setMode, cityView };
+  // Hàng rào + cột mốc biên giới phía đông (bên kia là nước láng giềng)
+  {
+    const fence = new pc.Entity('border-fence'); world.addChild(fence);
+    for (let z = -MAP_HALF + 12; z < MAP_HALF - 8; z += 9) {
+      const y = groundY(BORDER_X, z);
+      if (y < -0.5) continue;
+      ent(fence, 'cylinder', [BORDER_X, y + 1.2, z], [0.35, 2.4, 0.35], M.metal);
+      ent(fence, 'box', [BORDER_X, y + 1.7, z + 4.5], [0.12, 0.5, 9], M.army ?? M.metal, false);
+    }
+    for (let z = -MAP_HALF + 30; z < MAP_HALF; z += 60) { const y = groundY(BORDER_X, z); ent(fence, 'box', [BORDER_X, y + 2, z], [1.4, 4, 1.4], M.flag ?? M.metal); }
+  }
+
+  return { update, setGhost, lineViews, setQuality, infraViews: infra.views, setMode, cityView, cull };
 }

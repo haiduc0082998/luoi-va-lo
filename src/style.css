@@ -204,3 +204,16 @@ button{touch-action:manipulation}
   .rail button{min-height:44px}.rail button span{display:none}
 }
 @media(prefers-reduced-motion:reduce){.drawer,.drawer.open,.citypanel{transition:none}}
+
+/* Giai đoạn 9 */
+.cp-row.threat{grid-template-columns:7.5em minmax(0,1fr) auto}
+.btn.sm{min-height:34px;font-size:12px;padding:0 8px}
+.upbox{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;display:grid;gap:6px}.upbox b{font-size:14px}.upbox small{color:var(--mute)}
+.lv{display:inline-flex;gap:3px;vertical-align:middle;margin-left:6px}.lv i{width:9px;height:9px;border-radius:2px;background:var(--line)}.lv i.on{background:var(--cool)}
+.restart{border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:10px;padding:10px 12px;margin:10px 0;display:grid;gap:6px}.restart.ok{border-left-color:var(--cool)}.restart small{color:var(--mute)}
+.staffbox dl{margin:6px 0}.staffbox .meter{margin:4px 0 8px}
+.advice{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.advice li{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px;font-size:14px}
+.advice li.bad{border-left-color:var(--hot)}.advice li.warn{border-left-color:var(--amber)}.advice li .btn{justify-self:start}
+.tiplist{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px;color:var(--mute)}
+.rail .badge{position:absolute;top:4px;right:5px;min-width:18px;height:18px;border-radius:9px;background:var(--hot);color:#fff;font:700 11px/18px sans-serif;text-align:center;padding:0 4px}

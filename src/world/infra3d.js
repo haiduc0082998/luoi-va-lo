@@ -162,8 +162,8 @@ export function createInfra(app, world, M, emit, groundY) {
 
   // ---------- Thời tiết ----------
   const cloudMat = mat('#e7ecef', { opacity: 0 });
-  const clouds = Array.from({ length: 14 }, (_, i) => {
-    const e = ent(world, 'sphere', [((i * 37) % 220) - 110, 70 + (i % 3) * 8, ((i * 53) % 200) - 100], [40 + (i % 4) * 10, 8, 26 + (i % 3) * 8], cloudMat, false);
+  const clouds = Array.from({ length: 22 }, (_, i) => {
+    const e = ent(world, 'sphere', [((i * 37) % 360) - 180, 70 + (i % 3) * 8, ((i * 53) % 340) - 170], [40 + (i % 4) * 10, 8, 26 + (i % 3) * 8], cloudMat, false);
     return e;
   });
   const rainMat = mat('#c9d6e2', { opacity: 0.55 });
@@ -175,7 +175,7 @@ export function createInfra(app, world, M, emit, groundY) {
   function weather(G, dt, target) {
     const w = G.weather, kind = w.id, cover = { sunny: 0.15, windy: 0.45, heatwave: 0, storm: 1 }[kind];
     cloudMat.opacity += ((cover * 0.75) - cloudMat.opacity) * Math.min(1, dt); cloudMat.diffuse = kind === 'storm' ? col('#6b747c') : col('#e7ecef'); cloudMat.update();
-    for (const c of clouds) { const p = c.getLocalPosition(); c.setLocalPosition(p.x > 140 ? -140 : p.x + dt * (G.windNow ?? 5) * 0.8, p.y, p.z); }
+    for (const c of clouds) { const p = c.getLocalPosition(); c.setLocalPosition(p.x > 200 ? -200 : p.x + dt * (G.windNow ?? 5) * 0.8, p.y, p.z); }
     const raining = kind === 'storm';
     for (const d of drops) {
       d.e.enabled = raining;
@@ -201,6 +201,15 @@ export function createInfra(app, world, M, emit, groundY) {
       views.set(s.id, { g, s, update: infraBuilders[s.type](s, g) });
     }
   }
-  function update(G, dt, day) { for (const v of views.values()) v.update(G, dt, day); }
+  // vis(x, z, r): công trình có trong khung nhìn không; ngoài màn hình thì tắt hẳn, logic game vẫn chạy
+  const VR = { road: 60, airport: 45, port: 32, tower: 16, wind: 22 };
+  function update(G, dt, day, vis = null, cull = null) {
+    for (const v of views.values()) {
+      const on = !vis || vis(v.s.x, v.s.z, VR[v.s.type] ?? 22);
+      if (v.g.enabled !== on) v.g.enabled = on;
+      if (on) v.update(G, dt, day);
+      if (cull) cull[on ? 'shown' : 'hidden']++;
+    }
+  }
   return { nodeBuilders, sync, update, weather, views };
 }

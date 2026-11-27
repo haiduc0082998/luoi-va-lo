@@ -12,6 +12,9 @@ import { buildable, PADS } from './map.js';
 import { fmt } from './util.js';
 import { news } from './news.js';
 import { missionsStep } from './missions.js';
+import { createStaff, crewFactor, staffRatio, staffStep } from './workforce.js';
+import { capMul, subRated, level } from './upgrade.js';
+import { startupStep } from './startup.js';
 const newsRaw = news;
 import { applyTech, netParams, politicsStep, spotPrice, retailEffective, rpPerDay, has } from './policy.js';
 
@@ -44,15 +47,20 @@ const INITIAL_NODES = [
   { id: 'hydro', name: 'Thủy điện Sông Lam', type: 'hydro', x: -12.8, z: -8 },
   { id: 'border', name: 'Cửa khẩu Đông (nước láng giềng)', type: 'border', x: 104, z: -14 },
   { id: 'mine', name: 'Mỏ uranium & đất hiếm', type: 'mine', x: 34, z: -62, demandBase: 60 },
+  // Vùng đất mở rộng (bản đồ 380 × 380): đồng bằng phía nam và miền duyên hải phía tây
+  { id: 'south', name: 'Nam Bình', type: 'city', x: 46, z: 146, demandBase: 150 },
+  { id: 'west', name: 'Tây Hải', type: 'city', x: -128, z: 118, demandBase: 110 },
 ];
 const INITIAL_LINES = [
   { a: 'nuc', b: 'subE', kv: 500, A: 630 },
   { a: 'coal', b: 'subW', kv: 220, A: 400 },
   { a: 'subE', b: 'capital', kv: 500, A: 630 },
   { a: 'subW', b: 'port', kv: 220, A: 630 },
-  { a: 'subW', b: 'subE', kv: 220, A: 400 },
+  { a: 'subW', b: 'subE', kv: 500, A: 630 }, // trục 500 kV đông – tây: đủ tải cho cả miền tây và duyên hải
   { a: 'hydro', b: 'subW', kv: 220, A: 400 },
   { a: 'mine', b: 'subE', kv: 220, A: 240 },
+  { a: 'capital', b: 'south', kv: 220, A: 400 },
+  { a: 'port', b: 'west', kv: 220, A: 400 },
 ];
 for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : 9]);
 
@@ -73,6 +81,7 @@ export function createGame() {
     world: createWorld(), weather: createWeather(), res: createResources(), infra: [], cities: {}, happiness: 55, cityAcc: 60, cityVersion: 0,
     tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
     missions: { done: [], held: {} },
+    staff: createStaff(), repair: {},
   };
 }
 
@@ -158,6 +167,8 @@ function politics(G, dt) {
   let dA = fw > 0.999 ? (G.approval < 85 ? 2 : 0) : -14 * (1 - fw);
   dA -= maxRelease(G) * 25;
   dA += (G.happiness - 55) * 0.05; // dịch vụ đô thị tốt → dân hài lòng
+  dA += staffStep(G, dt);          // trả lương; có việc làm thì dân vui hơn
+  dA -= (G.propaganda ?? 0) * 0.012; // tuyên truyền chống phá làm xói mòn lòng tin
   if (G.inflation > 6) dA -= (G.inflation - 6) * 0.4;
   if (G.corruption > 35) dA -= (G.corruption - 35) * 0.05;
   G.approval = Math.max(0, Math.min(100, G.approval + dA * h));
@@ -186,8 +197,12 @@ export function advance(G, dtReal) {
     G.Ta = W.Ta; G.windNow = wind;
     const towers = Math.min(3, infraCount(G, 'tower'));
     U.forEach((r) => (r.dTin = W.dTin - 3 * towers));
-    const cap = { nuc: nuc.state === 'ok' ? U.reduce((s, r) => s + r.Pe, 0) / 1e6 : 0, coal: coal.state === 'ok' ? G.coalMax : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro : 0 };
-    for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind);
+    U.forEach((r) => (r.eff += 0.02 * (level(nuc) - 1))); // nâng cấp tua-bin
+    for (const n of G.net.nodes) if (n.type === 'sub') n.rated = subRated(n);
+    // Thiếu nhân công thì nhà máy không chạy hết công suất (lò hạt nhân vẫn sinh nhiệt, nhưng tua-bin giảm tải)
+    const crew = crewFactor(G);
+    const cap = { nuc: nuc.state === 'ok' ? (U.reduce((s, r) => s + r.Pe, 0) / 1e6) * crew : 0, coal: coal.state === 'ok' ? G.coalMax * capMul(coal) * crew : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro * capMul(hyd) * crew : 0 };
+    for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind) * capMul(n) * crew;
     const exportMW = G.market.exportOn ? G.market.contractMW : 0;
     stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, hConv: hConv(wind), ...netParams(G) }, (t, d) => netEvent(G, t, d));
     autoReclose(G, h);
@@ -197,6 +212,7 @@ export function advance(G, dtReal) {
       news(G, offsite ? 'Nhà máy hạt nhân có lại điện lưới ngoài.' : 'Nhà máy hạt nhân mất điện lưới ngoài! Bơm cần máy phát diesel.', offsite ? '' : 'bad');
     }
     U.forEach((R, k) => { R.offsite = offsite; stepReactor(R, h, (t) => reactorEvent(G, t, k + 1)); });
+    startupStep(G, h, 0.4 + 0.6 * staffRatio(G));
     if (G.engineer && G.engAuto) {
       G.engAcc += h;
       if (G.engAcc >= 1) {
@@ -228,7 +244,7 @@ export function startUnit2(G) {
 }
 function buildProgress(G, dt) {
   if (G.unit2.state !== 'building') return;
-  G.unit2.progress = Math.min(1, G.unit2.progress + dt / (UNIT2_DAYS * 86400));
+  G.unit2.progress = Math.min(1, G.unit2.progress + (dt * staffRatio(G)) / (UNIT2_DAYS * 86400)); // thiếu người thì công trường chậm
   if (G.unit2.progress >= 1) {
     G.unit2.state = 'done';
     G.reactor2 = createReactor({ wind: G.reactor.wind });

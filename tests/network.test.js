@@ -59,11 +59,23 @@ test('dây mảnh quá tải, tắt rơ-le thì cháy và cắt điện', () => 
   assert.equal(l.state, 'fire');
 });
 
-test('rơ-le bật thì cắt trước khi cháy', () => {
+test('rơ-le bật: điều độ giảm phát cho vừa dây, không cắt, không cháy; thiếu điện thì thành phố chịu', () => {
   const { g, c } = mk();
+  c.demandBase = 300;
   const l = createLine({ a: 'g', b: 'c', kv: 110, A: 95, L: 15 });
   const net = { nodes: [g, c], lines: [l] };
   const ev = run(net, env({ g: 600 }, 38), 600, 0.05);
+  assert.ok(!ev.includes('lineFire') && !ev.includes('trip'));
+  assert.ok(l.I <= l.Imax, `${l.I} ≤ ${l.Imax}`);
+  assert.ok(c.frac < 0.5, 'dây mảnh không chở đủ 300 MW');
+});
+
+test('rơ-le bật mà dây trong mạch vòng vẫn quá tải thì rơ-le cắt trước khi cháy', () => {
+  const { g, c } = mk();
+  c.demandBase = 300;
+  const h = createNode({ id: 'h', type: 'sub', x: 10, z: 10 });
+  const big = createLine({ a: 'g', b: 'h', kv: 500, A: 630, L: 15 }), thin = createLine({ a: 'h', b: 'c', kv: 110, A: 95, L: 15 });
+  const ev = run({ nodes: [g, h, c], lines: [big, thin] }, env({ g: 600 }, 38), 600, 0.05);
   assert.equal(ev[0], 'trip');
   assert.ok(!ev.includes('lineFire'));
 });

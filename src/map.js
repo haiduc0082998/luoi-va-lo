@@ -1,5 +1,7 @@
 // Bản đồ: hàm độ cao địa hình (đồi, núi phía bắc, sông uốn lượn), dùng chung cho đồ hoạ và luật xây dựng.
-export const MAP_HALF = 120;
+export const MAP_HALF = 190;
+/** Biên giới phía đông: bên kia là lãnh thổ nước láng giềng, không được xây. */
+export const BORDER_X = 116;
 export const WATER_Y = -1.2;
 
 export const riverCenter = (z) => -10 + 12 * Math.sin(z * 0.03);
@@ -10,7 +12,10 @@ export const PADS = [];
 
 const baseHeight = (x, z) => {
   let y = 2.2 * Math.sin(x * 0.045) * Math.cos(z * 0.05) + 1.4 * Math.sin(x * 0.11 + z * 0.07) + 1.2;
-  if (z < -45) y += (-45 - z) * 0.5 + Math.sin(x * 0.2) * Math.min(6, (-45 - z) * 0.15); // dãy núi phía bắc
+  if (z < -45) y += Math.min(30, (-45 - z) * 0.5) + Math.sin(x * 0.2) * Math.min(6, (-45 - z) * 0.15); // dãy núi phía bắc
+  if (x > 125) y += Math.min(7, (x - 125) * 0.1);                          // cao nguyên nước láng giềng
+  if (x < -150) y -= (-150 - x) * 0.18 * (1 + 0.3 * Math.sin(z * 0.05));   // bờ biển phía tây
+  if (z > 125) y -= Math.min(1.2, (z - 125) * 0.03);                        // đồng bằng phía nam thấp dần
   return y;
 };
 
@@ -37,6 +42,8 @@ export const inRiver = (x, z) => Math.abs(x - riverCenter(z)) < RIVER_HALF + 2;
 /** Có thể đặt trạm ở (x, z) không: trong bản đồ, không ở sông, không quá dốc, cách công trình khác ≥ 9. */
 export function buildable(x, z, nodes) {
   if (Math.abs(x) > MAP_HALF - 10 || Math.abs(z) > MAP_HALF - 10) return 'Ngoài bản đồ';
+  if (x > BORDER_X) return 'Lãnh thổ nước láng giềng';
+  if (x < -145 && height(x, z) < 0) return 'Không xây được dưới biển';
   if (inRiver(x, z)) return 'Không xây được trên sông';
   if (height(x, z) > 9) return 'Địa hình quá cao, quá dốc';
   if (nodes.some((n) => Math.hypot(n.x - x, n.z - z) < 9)) return 'Quá gần công trình khác';

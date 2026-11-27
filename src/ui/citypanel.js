@@ -1,6 +1,7 @@
 // Bảng điều khiển khi đang ở trong một thành phố: hạnh phúc, dịch vụ, công cụ xây, vẽ metro.
 import { fmt, esc, clamp } from '../util.js';
-import { SERVICES, CATS, serviceCost, finishLine, lotAt, trackLength, TRACK_COST } from '../city.js';
+import { SERVICES, CATS, serviceCost, finishLine, lotAt, trackLength, TRACK_COST, THREATS, CAMPAIGNS, campaign } from '../city.js';
+import { UPGRADES, canUpgrade, upgradeCost, upgradeChance, upgrade, level } from '../upgrade.js';
 import { skipDayNight, hourOfDay } from '../game.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,6 +17,10 @@ export function createCityPanel(G, { onExit }) {
     <div class="cp-big"><div><span class="lab">Hạnh phúc</span><b id="cpHappy"></b></div><div><span class="lab">Dân số</span><b id="cpPop"></b></div><div><span class="lab">Tắc đường</span><b id="cpJam"></b></div></div>
     <div id="cpParts">${CATS.map(([k, label]) => `<div class="cp-row"><span>${label}</span><div class="meter wide"><i data-k="${k}"></i></div></div>`).join('')}</div>
     <p class="note" id="cpCost"></p>
+    <p class="lab sp">Mối nguy</p>
+    <div id="cpThreats">${Object.entries(THREATS).map(([k, t]) => `<div class="cp-row threat" title="${t.desc}"><span>${t.name}</span><div class="meter wide"><i data-th="${k}"></i></div><button class="btn sm" type="button" data-camp="${k}">${CAMPAIGNS[k].name}</button></div>`).join('')}</div>
+    <p class="note" id="cpThreatNote">Cảnh sát giảm ma tuý và khủng bố, bệnh viện giảm ma tuý, đài truyền hình chặn tuyên truyền. Chiến dịch có hiệu lực trên cả nước.</p>
+    <div class="proj sp"><b id="cpUpT"></b><small id="cpUpD"></small><button class="btn" id="cpUp" type="button"></button></div>
     <div class="seg cp-tools" id="cpTools">${TOOLS.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div>
     <p class="note" id="cpHint"></p>
     <div class="btns" id="cpMetro" hidden><button class="btn" id="cpFinish" type="button">Hoàn tất tuyến</button></div>
@@ -29,6 +34,8 @@ export function createCityPanel(G, { onExit }) {
     ui.tool = b.dataset.t;
   });
   $('cpFinish').addEventListener('click', () => { const C = G.cities[ui.city]; if (C) finishLine(G, C); });
+  $('cpThreats').addEventListener('click', (e) => { const b = e.target.closest('[data-camp]'); if (b) campaign(G, b.dataset.camp); });
+  $('cpUp').addEventListener('click', () => { const n = G.net.nodes.find((x) => x.id === ui.city); if (n) upgrade(G, n); });
 
   function hint(C) {
     if (ui.tool === 'look') return 'Bấm vào một lô để xem. Mỗi dịch vụ phủ sóng các lô quanh nó; khu dân cư được phủ đủ loại thì hạnh phúc tăng.';
@@ -48,7 +55,13 @@ export function createCityPanel(G, { onExit }) {
     set('cpPop', `${fmt(n.demandBase * 1000)} dân`);
     set('cpJam', C.congestion > 0.9 ? 'Nặng' : C.congestion > 0.5 ? 'Vừa' : 'Thông thoáng');
     for (const i of el.querySelectorAll('#cpParts i')) { const v = C.parts[i.dataset.k] ?? 0; i.style.width = `${clamp(v * 100, 0, 100)}%`; i.style.background = v < 0.4 ? 'var(--hot)' : v < 0.7 ? 'var(--amber)' : 'var(--cool)'; }
-    set('cpCost', `Dịch vụ tiêu thụ ${fmt(C.extraMW, 1)} MW từ lưới, chi phí vận hành ${fmt(C.upkeep * G.priceLevel, 2)} triệu USD/ngày. ${C.lines.filter((l) => l.stops.length >= 2).length} tuyến metro, tổng ${fmt(C.lines.reduce((a, l) => a + trackLength(C, l), 0), 1)} lô ray.`);
+    set('cpCost', `Dịch vụ tiêu thụ ${fmt(C.extraMW, 1)} MW từ lưới, chi phí vận hành ${fmt(C.upkeep * G.priceLevel, 2)} triệu USD/ngày. ${C.lines.filter((l) => l.stops.length >= 2).length} tuyến metro, tổng ${fmt(C.lines.reduce((a, l) => a + trackLength(C, l), 0), 1)} lô ray.${C.bankIncome > 0.001 ? ` Ngân hàng mang về ${fmt(C.bankIncome * G.priceLevel * 1000)} nghìn USD/ngày.` : ''}`);
+    for (const i of el.querySelectorAll('#cpThreats i')) { const v = C.threat?.[i.dataset.th] ?? 0; i.style.width = `${clamp(v, 0, 100)}%`; i.style.background = v >= 60 ? 'var(--hot)' : v >= 35 ? 'var(--amber)' : 'var(--cool)'; }
+    for (const b of el.querySelectorAll('[data-camp]')) { const c = CAMPAIGNS[b.dataset.camp].cost * G.priceLevel * (1 + G.corruption / 100); const t = `${CAMPAIGNS[b.dataset.camp].name} (${fmt(c, 1)} tr)`; if (b.textContent !== t) b.textContent = t; b.disabled = c > G.budget; }
+    const lv = level(n);
+    set('cpUpT', `Quy mô thành phố: cấp ${lv}/${UPGRADES.city.max}`);
+    set('cpUpD', canUpgrade(n) ? `${UPGRADES.city.what(lv)}. Tỉ lệ thành công ${fmt(upgradeChance(G, n) * 100)}%.` : 'Đã đạt quy mô tối đa.');
+    set('cpUp', canUpgrade(n) ? `Nâng cấp (${fmt(upgradeCost(G, n), 1)} triệu USD)` : 'Tối đa'); $('cpUp').disabled = !canUpgrade(n) || upgradeCost(G, n) > G.budget;
     for (const b of $('cpTools').children) b.setAttribute('aria-pressed', b.dataset.t === ui.tool);
     set('cpHint', hint(C));
     $('cpMetro').hidden = !(ui.tool === 'metro' && C.draft);

@@ -7,6 +7,8 @@ import { RATED, C_CORE, FLOW_NOM, outletTemp, T_IN, mwDisplay, dieselRunning, bu
 import * as World from '../world.js';
 import * as Infra from '../infra.js';
 import { current as weatherNow, cycleWeather } from '../weather.js';
+import { UPGRADES, canUpgrade, upgradeCost, upgradeChance, upgrade, level } from '../upgrade.js';
+import { restartState, beginStartup, REPAIR } from '../startup.js';
 
 const $ = (id) => document.getElementById(id);
 const set = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textContent = v; };
@@ -49,7 +51,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   $('buildMenu').addEventListener('click', (e) => { const b = e.target.closest('[data-b]'); if (!b) return; ui.tool = `build:${b.dataset.b}`; $('buildMenu').hidden = true; onTool(ui.tool); });
   $('weatherBtn').addEventListener('click', () => cycleWeather(G));
   let view = 'overview';
-  seg('views', ['overview', 'nuclear', 'capital', 'west'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây' }[v]), () => view, (v) => { view = v; onView(v); });
+  seg('views', ['overview', 'nuclear', 'capital', 'west', 'south', 'coast'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây', south: 'Nam Bình', coast: 'Tây Hải' }[v]), () => view, (v) => { view = v; onView(v); });
   seg('newKv', [10.5, 110, 220, 500, 750], kvText, () => ui.newKv, (v) => (ui.newKv = v));
   $('sc').addEventListener('click', () => { ui.sc = !ui.sc; });
   seg('newA', [95, 150, 240, 400, 630], (v) => v, () => ui.newA, (v) => (ui.newA = v));
@@ -100,7 +102,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
         <button class="btn danger" data-act="demolish" type="button">Tháo dỡ</button></div>`;
     }
     const n = Game.nodeById(G, s.id);
-    const head = `<h2>${esc(n.name)}</h2><p class="tag2">${TYPE_TEXT[n.type]} · máy biến áp ${fmt(n.rated)} MVA</p>${n.type === 'border' ? '' : '<div class="btns"><button class="btn" data-act="guard" type="button"></button></div>'}`;
+    const up = UPGRADES[n.type] ? `<div class="upbox"><b>Cấp ${level(n)}/${UPGRADES[n.type].max}<span class="lv">${Array.from({ length: UPGRADES[n.type].max }, (_, i) => `<i class="${i < level(n) ? 'on' : ''}"></i>`).join('')}</span></b><small id="upD"></small><button class="btn" data-act="upgrade" id="upBtn" type="button"></button></div>` : '';
+    const head = `<h2>${esc(n.name)}</h2><p class="tag2">${TYPE_TEXT[n.type]} · máy biến áp ${fmt(n.rated)} MVA</p>${n.type === 'border' ? '' : '<div class="btns"><button class="btn" data-act="guard" type="button"></button></div>'}${up}`;
     const tx = row('Nhiệt độ dầu máy biến áp', 'cháy ở 150 °C', 'nT', bar('nTb', [93.7]));
     const repair = `<div class="btns"><button class="btn" data-act="repairNode" type="button" ${n.state === 'fire' ? '' : 'hidden'}>Thay máy biến áp (${money(Game.NODE_REPAIR * G.priceLevel)})</button>${n.sellable ? `<button class="btn danger" data-act="sellNode" type="button">Bán (thu hồi ${money(0.7 * n.cost)})</button>` : ''}</div>`;
     if (n.type === 'wind') return `${head}<dl>${row('Đang phát', 'theo lập phương tốc độ gió, định mức 12 m/s', 'wG')}${row('Gió lúc này', 'ngắt bảo vệ khi trên 25 m/s', 'wW')}${tx}</dl>${repair}`;
@@ -119,6 +122,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     return `${head}${tabs}${proj}
       <div class="screen" id="rScreen"></div>
       <div class="row sp"><label for="rod">Thanh điều khiển rút ra <output id="rodV"></output></label><input type="range" id="rod" min="0" max="100" step="0.5"></div>
+      <div class="restart" id="rsBox"><b id="rsT"></b><small id="rsD"></small><button class="btn primary" data-act="restart" id="rsBtn" type="button"></button></div>
       <div class="btns"><button class="btn scram" data-act="scram" type="button"></button></div>
       <p class="lab sp">Bơm làm mát</p><div class="btns" id="pumps">${[0, 1, 2, 3].map((i) => `<button class="btn" data-act="pump" data-i="${i}" type="button">Bơm ${i + 1}</button>`).join('')}</div>
       <p class="lab sp">Lớp 3 · Sơ đồ điện tự dùng (bấm máy cắt để đóng/mở)</p>
@@ -162,6 +166,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     if (act === 'unit') { ui.unit = +b.dataset.u; ui.inspKey = ''; }
     if (act === 'unit2') { Game.startUnit2(G); ui.inspKey = ''; }
     if (act === 'guard') World.toggleGuard(G, s.id);
+    if (act === 'upgrade') { upgrade(G, Game.nodeById(G, s.id)); ui.inspKey = ''; }
+    if (act === 'restart') beginStartup(G, ui.unit);
     if (act === 'enterCity') api.onEnterCity?.(s.id);
     if (act === 'sellNode' && Infra.sell(G, 'node', s.id)) select(null);
     if (act === 'sellInfra' && Infra.sell(G, 'infra', s.id)) select(null);
@@ -182,6 +188,26 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     const key = s ? `${s.kind}:${s.id}:${s.kind === 'line' ? Game.lineById(G, s.id)?.state : s.kind === 'infra' ? '' : Game.nodeById(G, s.id)?.state}:${ui.unit}:${G.unit2.state}:${has(G, 'unit2')}` : 'none';
     if (key !== ui.inspKey) { ui.inspKey = key; insp.innerHTML = inspectorHtml(); }
     if (!s) return;
+    if (s.kind === 'node' && $('upBtn')) {
+      const n = Game.nodeById(G, s.id), ok = canUpgrade(n), c = ok ? upgradeCost(G, n) : 0;
+      set('upD', ok ? `${UPGRADES[n.type].what(level(n))}. Tỉ lệ thành công ${fmt(upgradeChance(G, n) * 100)}% (giảm theo cấp và tham nhũng, tăng nhờ kỹ sư giỏi và đủ nhân công).` : 'Đã đạt cấp tối đa.');
+      set('upBtn', ok ? `Nâng cấp lên cấp ${level(n) + 1} (${money(c)})` : 'Cấp tối đa'); $('upBtn').disabled = !ok || c > G.budget;
+    }
+    if (s.kind === 'node' && $('rsBtn')) {
+      const k = G.reactor2 ? ui.unit : 1, st = restartState(G, k), R = k === 2 ? G.reactor2 : G.reactor, job = G.repair?.[k];
+      const TXT = {
+        running: ['Lò đang chạy', `Công suất ${fmt((R.Pf / RATED) * 100)}%. Nút này dùng khi lò bị SCRAM hoặc đang dừng.`, 'Khởi động lại lò'],
+        ready: ['Lò đang dừng', 'Bấm để chạy quy trình khởi động tự động: đóng máy cắt CB1–CB3, chạy 4 bơm, chờ lõi < 330 °C và áp suất bình thường, giải trừ SCRAM, rút thanh 0,4 %/s tới 100% công suất.', 'Khởi động lại lò'],
+        startup: ['Đang khởi động', R.startup?.phase === 'aux' ? 'Bước 1/3: đóng máy cắt, chạy bơm…' : R.startup?.phase === 'wait' ? `Bước 2/3: chờ lõi đủ điều kiện (${fmt(R.T)} °C, ${fmt(R.p, 1)} MPa, lưu lượng ${fmt(R.flow * 100)}%)…` : `Bước 3/3: rút thanh ${fmt(R.rod, 1)}% → công suất ${fmt((R.Pf / RATED) * 100)}%…`, 'Đang chạy quy trình'],
+        nofuel: ['Hết nhiên liệu', 'Cần có uranium trong kho (khai thác ở mỏ hoặc nhận viện trợ) rồi mới khởi động được.', 'Khởi động lại lò'],
+        'repair-loca': ['Vỡ ống sơ cấp', `Phải ${REPAIR.loca.what} (~${REPAIR.loca.hours} giờ, thiếu nhân công thì lâu hơn).`, `Sửa chữa (${money(REPAIR.loca.cost * Game.costMul(G))})`],
+        'repair-core': ['Lõi lò bị phá huỷ', `Phải ${REPAIR.core.what} (~${REPAIR.core.hours} giờ).`, `Thay lõi (${money(REPAIR.core.cost * Game.costMul(G))})`],
+        repairing: ['Đang sửa chữa', job ? `Còn khoảng ${fmt(job.left / 3600, 1)} giờ. Xong sẽ ở trạng thái dừng an toàn, sau đó bấm khởi động lại.` : '', 'Đang sửa chữa'],
+      }[st];
+      set('rsT', TXT[0]); set('rsD', TXT[1]); set('rsBtn', TXT[2]);
+      $('rsBtn').disabled = st === 'running' || st === 'startup' || st === 'repairing' || st === 'nofuel';
+      $('rsBox').classList.toggle('ok', st === 'running');
+    }
     if (s.kind === 'infra') {
       const it = G.infra.find((x) => x.id === s.id);
       set('xC', money(it.cost));

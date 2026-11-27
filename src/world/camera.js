@@ -4,15 +4,17 @@ import * as pc from 'playcanvas';
 import { clamp } from '../util.js';
 
 export const VIEWS = {
-  overview: { target: [0, 0, 6], yaw: 20, pitch: 48, dist: 230 },
+  overview: { target: [-5, 0, 15], yaw: 20, pitch: 50, dist: 340 },
   nuclear: { target: [12, 6, -30], yaw: -30, pitch: 32, dist: 78 },
   capital: { target: [52, 4, 20], yaw: 30, pitch: 30, dist: 80 },
   west: { target: [-40, 4, 30], yaw: -20, pitch: 34, dist: 110 },
+  south: { target: [46, 4, 140], yaw: 15, pitch: 32, dist: 90 },
+  coast: { target: [-128, 2, 115], yaw: -35, pitch: 32, dist: 95 },
 };
 
 export function createOrbitCamera(app, canvas, { onClick, onHover }) {
   const cam = new pc.Entity('camera');
-  cam.addComponent('camera', { fov: 45, nearClip: 0.5, farClip: 900 });
+  cam.addComponent('camera', { fov: 45, nearClip: 0.5, farClip: 1100 });
   app.root.addChild(cam);
 
   const v0 = VIEWS.overview;
@@ -20,7 +22,7 @@ export function createOrbitCamera(app, canvas, { onClick, onHover }) {
   const goal = { ...s, target: s.target.clone() };
   const pointers = new Map();
   let pinch = 0, down = null;
-  const bounds = { x: 0, z: 0, r: 120 };
+  const bounds = { x: 0, z: 0, r: 190 };
   const setBounds = (x, z, r) => { bounds.x = x; bounds.z = z; bounds.r = r; };
 
   const go = (name) => {
@@ -66,14 +68,14 @@ export function createOrbitCamera(app, canvas, { onClick, onHover }) {
     } else if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      if (pinch) goal.dist = clamp(goal.dist * (pinch / d), 25, 320);
+      if (pinch) goal.dist = clamp(goal.dist * (pinch / d), 25, 460);
       pinch = d;
       pan(dx / 2, dy / 2);
     }
   });
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    goal.dist = clamp(goal.dist * Math.pow(1.0015, e.deltaY), 25, 320);
+    goal.dist = clamp(goal.dist * Math.pow(1.0015, e.deltaY), 25, 460);
   }, { passive: false });
 
   const pos = new pc.Vec3();

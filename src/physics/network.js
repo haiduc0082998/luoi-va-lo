@@ -109,6 +109,18 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
   }
   for (const l of net.lines) { l.R = lineResistance(l); l.P = l.I = l.loss = l.drop = 0; }
 
+  // Điều độ biết ngưỡng bảo vệ: một nhà máy không được giao phát quá khả năng tải của các tuyến nối với nó
+  // (P ≈ U·Imax, chừa 10 % dự phòng), như điều độ viên thật tránh làm rơ-le cắt tuyến ra nhà máy.
+  // Tuyến bị tắt rơ-le thì điều độ không biết giới hạn: người chơi tự chịu rủi ro quá tải, cháy dây.
+  for (const n of net.nodes) {
+    if (!(n.cap > 0) || !GEN_ORDER.includes(n.type)) continue;
+    const mine = net.lines.filter((l) => (l.a === n.id || l.b === n.id) && lineUsable(l));
+    if (!mine.length || mine.some((l) => !l.relay)) continue;
+    const out = mine.reduce((s, l) => s + (l.kv * l.Imax) / 1000, 0);
+    n.exportCap = 0.9 * out;
+    n.cap = Math.min(n.cap, n.exportCap);
+  }
+
   const islands = findIslands(net);
   let D = 0, S = 0, G = 0, loss = 0, hzSum = 0, hzW = 0;
   islands.forEach((isl, k) => {

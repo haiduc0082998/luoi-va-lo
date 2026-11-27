@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–8)
+## Có gì trong bản này (Giai đoạn 1–9)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -129,6 +129,37 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - Chừa vùng tai thỏ và thanh home (safe area).
   - Nút cao ít nhất 44 px; hướng dẫn thao tác riêng cho màn hình cảm ứng.
 
+**Giai đoạn 9: nhân công, nâng cấp, khởi động lại lò, bản đồ rộng, mối nguy đô thị**
+- **Nhân công** (cửa sổ Quốc gia):
+  - Mỗi công trình cần một kíp vận hành, lấy từ khoảng 0,6% dân số đô thị.
+  - Thiếu người thì nhà máy chỉ chạy 30–100% công suất, công trường và sửa chữa chậm lại, nâng cấp dễ hỏng.
+  - Thuê người tốn phí tuyển và lương mỗi ngày; có việc làm thì dân vui hơn, sa thải thì mất lòng dân.
+- **Nâng cấp công trình** với xác suất thành công:
+  - Hạt nhân: hiệu suất tua-bin +2 điểm %. Than: +20% công suất. Thuỷ điện: +15%. Gió: +25%. Trạm biến áp: +40% MVA.
+  - Thành phố: +25% dân và nhu cầu điện, nhà cao tầng hơn cả trên bản đồ lẫn trong thành phố.
+  - Tỉ lệ thành công giảm theo cấp và tham nhũng, tăng nhờ kỹ sư giỏi và đủ nhân công.
+  - Thất bại thì mất tiền; với lò hạt nhân thì lò còn bị SCRAM.
+- **Nút "Khởi động lại lò"** chạy quy trình thật trên mô hình vật lý:
+  - Đóng máy cắt CB1–CB3 và chạy 4 bơm.
+  - Chờ lõi dưới 330 °C, áp suất bình thường, rồi giải trừ SCRAM.
+  - Rút thanh 0,4%/s tới 100% công suất.
+  - Lò vỡ ống hoặc nóng chảy thì phải sửa chữa / thay lõi trước (tốn tiền, mất 18–72 giờ).
+- **Bản đồ 380 × 380** (trước là 240 × 240):
+  - Thêm đồng bằng phía nam với thành phố **Nam Bình**, miền duyên hải phía tây với **Tây Hải**, bờ biển, và cao nguyên của nước láng giềng.
+  - Có hàng rào biên giới; bên kia biên giới không được xây.
+  - Trục đông – tây nâng lên 500 kV.
+- **Ẩn vùng ngoài màn hình:** công trình, tuyến dây và hạ tầng nằm ngoài khung nhìn camera thì không vẽ và không chạy hoạt cảnh. Logic game vẫn chạy đủ, nên khi quay lại vùng đó mọi thứ đúng trạng thái hiện tại.
+- **Điều độ biết giới hạn đường dây:** nhà máy không bị giao phát quá khả năng tải các tuyến nối ra (khi rơ-le bật). Thiếu đường dây thì cố vấn nhắc kéo thêm tuyến.
+- **Tiện ích đô thị:**
+  - **Ngân hàng:** thu nhập đều mỗi ngày.
+  - **Đài truyền hình:** chặn tuyên truyền.
+- **Mối nguy đô thị:**
+  - **Thuốc phiện:** buôn lậu qua cảng, làm giảm hạnh phúc và năng suất lao động.
+  - **Khủng bố:** đánh bom trạm biến áp hoặc toà nhà; lính gác chặn được.
+  - **Tuyên truyền chống phá:** làm xói mòn lòng dân.
+  - Cảnh sát, bệnh viện, đài truyền hình làm giảm các mối nguy; có 3 chiến dịch toàn quốc để đẩy lùi nhanh.
+- **Cố vấn** (nút Mẹo): lời khuyên theo tình huống, kèm nút làm ngay (khởi động lại lò, thuê đủ người, mở chiến dịch…), và 12 mẹo chơi.
+
 ## Cấu trúc mã
 
 ```
@@ -154,6 +185,11 @@ src/
   ui/stage5.js         bảng Thị trường · Chính trị · Cây công nghệ · Nhiệm vụ, màn hình thua
   ui/gamebar.js        thanh ván chơi: lưu, tải, ván mới, âm thanh, phím tắt, tự lưu
   ui/drawers.js        thanh nút bên phải và các cửa sổ trượt (mở/đóng, vuốt để đóng, chấm báo)
+  ui/extras.js         bảng Nhân công và cửa sổ Cố vấn
+  workforce.js         nhân công: nhu cầu theo công trình, lực lượng lao động, lương, hệ số công suất
+  upgrade.js           nâng cấp công trình có xác suất thành công
+  startup.js           quy trình khởi động lại lò, sửa chữa sau sự cố
+  tips.js              cố vấn: lời khuyên theo trạng thái ván chơi
   save.js              lưu / tải ván vào localStorage (giữ Set, getter, số vô cực)
   missions.js          nhiệm vụ và phần thưởng
   audio.js             âm thanh tổng hợp bằng WebAudio
