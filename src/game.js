@@ -62,7 +62,7 @@ const INITIAL_LINES = [
   { a: 'capital', b: 'south', kv: 220, A: 400 },
   { a: 'port', b: 'west', kv: 220, A: 400 },
 ];
-for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : 9]);
+for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : n.type === 'coal' ? 20 : 9]); // nhiệt điện: mặt bằng rộng cho tấm nền mô hình
 
 export function createGame() {
   const nodes = INITIAL_NODES.map((n) => createNode(n));

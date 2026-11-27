@@ -177,6 +177,11 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 - **Cờ cảnh báo trên thanh chỉ số:** "i" là thông tin, "!" nhấp nháy là nghiêm trọng. Rê chuột để xem nguyên nhân và cách xử lý (ví dụ tần số 50,2 Hz là dư công suất, nên xuất khẩu hoặc giảm lò); bấm để mở Cố vấn.
 - **Nhiên liệu:** hiện số ngày uranium còn đủ theo công suất lò thực tế và sản lượng mỏ. Chạy lò thấp thì tiết kiệm nhiên liệu.
 - **Mô hình mới:** mây (`cloud.glb`, giảm từ 57 600 xuống khoảng 1 450 tam giác) và máy bay chở khách (`airliner.glb`) bay ngang bầu trời.
+- **Nhiệt điện Đồi Than** dùng mô hình nhà máy nhiệt điện: khói than ra 2 ống khói theo công suất phát, hơi nước ra 2 tháp làm mát.
+- **Chernobyl trong kịch bản RBMK** (đồ hoạ cao) dùng mô hình cụm 4 lò:
+  - Lò số 4 sụp thành đống đổ nát khi nổ.
+  - Mái vòm che an toàn mới chỉ dựng lên khi người chơi bấm "Thay lõi" để dọn dẹp.
+  - Sửa xong thì lò số 4 trở lại, và vẫn là lò RBMK (trước đây lò sửa xong bị đổi thành VVER).
 
 ## Cấu trúc mã
 

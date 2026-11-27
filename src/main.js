@@ -138,7 +138,8 @@ loadModel(app, 'car', 'models/car.glb');
 loadModel(app, 'man', 'models/man.glb');
 loadModel(app, 'woman', 'models/woman.glb');
 loadModel(app, 'chernobyl', 'models/chernobyl.glb');
-loadModel(app, 'supercomplex', 'models/chernobyl-supercomplex.glb');
+loadModel(app, 'chernobyl_complex', 'models/chernobyl-complex.glb'); // thay bản supercomplex (file vẫn còn trong models/)
+loadModel(app, 'thermal', 'models/thermal-plant.glb');
 loadModel(app, 'cloud', 'models/cloud.glb');
 loadModel(app, 'airliner', 'models/airliner.glb');
 world = buildWorld(app);

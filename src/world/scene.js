@@ -15,7 +15,7 @@ import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyp
 
 const SEG = 6;
 export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0], wind: [0, 9, 0], mine: [8, 13, 0] };
-export const PICK_RADIUS = { nuclear: 17, coal: 10, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14 };
+export const PICK_RADIUS = { nuclear: 17, coal: 15, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14 };
 const groundY = (x, z) => Math.max(height(x, z), WATER_Y);
 
 export function attachPoint(n, out = new pc.Vec3()) {
@@ -214,13 +214,18 @@ export function buildWorld(app) {
       // Gốc mô hình = tâm khối lò số 4, trùng tâm lõi; quay 180° để khu phụ trợ trải về phía nam, tránh đập thủy điện.
       const keep = new Set([coreLight, flash, blaze.g, sam, corium, ...debris]);
       const vver = g.children.filter((c) => !keep.has(c));
-      const CH = 0.08; // 1 m → 0,08 đơn vị: khu 480 × 340 m chiếm 38 × 27 đơn vị. Tỉ lệ & hướng được chọn bằng cách dò
-      // địa hình: khu nhà máy gần như không lấn sông, nền phẳng, không đè lên trạm/đập/mỏ khác
+      const CH = 0.08; // bản nhẹ (macro FreeCAD, mét): khu 480 × 340 m chiếm 38 × 27 đơn vị
+      const CX = 0.18; // bản cao (chernobyl_game_complex.glb): 180 × 130 → 32 × 23 đơn vị
+      // Tỉ lệ & hướng chọn bằng cách dò địa hình: không lấn sông, nền phẳng, không đè lên trạm/đập/mỏ khác
       const rb = new pc.Entity('rbmk'); rb.setLocalPosition(0, 0.05, 0); rb.setLocalEulerAngles(0, 180, 0); g.addChild(rb);
       const hiQ = new pc.Entity(), loQ = new pc.Entity(); rb.addChild(hiQ); rb.addChild(loQ);
-      const r4 = [], ruins = [];
-      const grab = (e) => { r4.push(e.findByName('Reactor4')); ruins.push(e.findByName('Reactor4_Ruin')); };
-      model(hiQ, 'supercomplex', CH, 0, null, grab);
+      const r4 = [], ruins = [], arches = [];
+      const grab = (e) => {
+        r4.push(e.findByName('Reactor4'));
+        ruins.push(e.findByName('Reactor4_Ruin'), e.findByName('Reactor4_Rubble'));
+        arches.push(e.findByName('Arch')); // mái vòm che an toàn mới: chỉ hiện khi đang dọn dẹp sau vụ nổ
+      };
+      model(hiQ, 'chernobyl_complex', CX, 0, null, grab);
       model(loQ, 'chernobyl', CH, 0, null, grab);
       // Tấm che lò trên mái gian lò (vị trí lõi), phát sáng theo màu/độ nóng của vòng Cherenkov
       const lid = ent(g, 'cylinder', [0, 1.65, 0], [1.6, 0.06, 1.6], M.ring, false);
@@ -241,8 +246,10 @@ export function buildWorld(app) {
         }
         if (rbmk) {
           hiQ.enabled = hiQuality; loQ.enabled = !hiQuality;
-          r4.forEach((e) => e && (e.enabled = !R.boom)); ruins.forEach((e) => e && (e.enabled = R.boom));
-          lid.enabled = true; lid.setLocalPosition(0, R.boom ? 0.4 : 1.65, 0); // sau nổ: lõi hở giữa đống đổ nát
+          const wrecked = R.boom || G.repair?.[1]?.kind === 'core';
+          r4.forEach((e) => e && (e.enabled = !wrecked)); ruins.forEach((e) => e && (e.enabled = wrecked));
+          arches.forEach((e) => e && (e.enabled = G.repair?.[1]?.kind === 'core'));
+          lid.enabled = !G.repair?.[1]; lid.setLocalPosition(0, R.boom ? 0.4 : hiQuality ? 2.6 : 1.65, 0); // sau nổ: lõi hở giữa đống đổ nát
         } else lid.enabled = false;
         updateU2(G, t); if (rbmk) steam2.enabled = false; sam.enabled = G.world.guards.includes(n.id);
         rods.forEach((r) => { const p = r.getLocalPosition(); r.setLocalPosition(p.x, 3.6 + (R.rod / 100) * 5, p.z); });
@@ -276,22 +283,31 @@ export function buildWorld(app) {
         M.ring.update();
         M.core.emissive = M.ring.emissive; M.core.emissiveIntensity = R.melt ? 0.2 : 0.6 + clamp((R.Pf / RATED) * 1.5, 0, 3) + hotK * 2; M.core.update();
         acc += dt * 5 * clamp((R.Pe + (G.reactor2?.Pe ?? 0)) / (0.33 * RATED), 0, 2);
-        while (acc >= 1) { acc -= 1; const [x, y, z] = (rbmk ? rbTowers : towers)[Math.random() < 0.5 ? 0 : 1]; emit(x, y + (rbmk ? 3.2 : 20), z, '#f3f5f4', rbmk ? 2.5 : 5, rbmk ? 4 : 9); }
+        while (acc >= 1) { acc -= 1; const [x, y, z] = (rbmk ? rbTowers : towers)[Math.random() < 0.5 ? 0 : 1]; if (!rbmk || !hiQuality) emit(x, y + (rbmk ? 3.2 : 20), z, '#f3f5f4', rbmk ? 2.5 : 5, rbmk ? 4 : 9); }
       };
     },
 
     coal(n, g) {
       const y0 = groundY(n.x, n.z);
       g.setLocalPosition(n.x, y0, n.z);
-      ent(g, 'box', [0, 4, 0], [12, 8, 10], M.concrete);
-      ent(g, 'box', [0, 8.5, 0], [12.4, 1, 10.4], M.roof);
-      ent(g, 'cylinder', [-3, 12, -3], [1.8, 24, 1.8], M.concrete);
-      ent(g, 'cylinder', [2, 11, -3], [1.6, 22, 1.6], M.concrete);
-      ent(g, 'cone', [-9, 2, 6], [7, 4, 7], M.coalPile);
+      // Mô hình nhà máy nhiệt điện (nha_may_nhiet_dien.glb người chơi gửi), phóng 1,3 lần; hình dựng sẵn dùng tạm khi đang tải
+      const tmp = new pc.Entity(); g.addChild(tmp);
+      ent(tmp, 'box', [0, 4, 0], [12, 8, 10], M.concrete);
+      ent(tmp, 'box', [0, 8.5, 0], [12.4, 1, 10.4], M.roof);
+      ent(tmp, 'cylinder', [-3, 12, -3], [1.8, 24, 1.8], M.concrete);
+      ent(tmp, 'cylinder', [2, 11, -3], [1.6, 22, 1.6], M.concrete);
+      model(g, 'thermal', 1.3, 0, tmp);
+      ent(g, 'cone', [-25, 2, 9], [8, 4, 8], M.coalPile); // bãi than cạnh tấm nền
+      // Khói than ra 2 ống khói, hơi nước trắng ra 2 tháp làm mát (vị trí lấy từ mô hình × 1,3)
+      const STACKS = [[-2.6, 15.6, -7.8], [-6.5, 15.6, -7.8]], TOWERS = [[16.9, 10.4, 5.2], [10.4, 10.4, 5.2]];
       let acc = 0;
       return (G, dt) => {
         acc += dt * 4 * clamp(n.gen / 600, 0, 1);
-        while (acc >= 1) { acc -= 1; emit(n.x - 3, y0 + 24, n.z - 3, '#5f6466', 4, 7); emit(n.x + 2, y0 + 22, n.z - 3, '#6f7476', 4, 7); }
+        while (acc >= 1) {
+          acc -= 1;
+          for (const [x, y, z] of STACKS) emit(n.x + x, y0 + y, n.z + z, '#5f6466', 3, 7);
+          const [x, y, z] = TOWERS[Math.random() < 0.5 ? 0 : 1]; emit(n.x + x, y0 + y, n.z + z, '#f0f2f1', 3.5, 6);
+        }
       };
     },
 

@@ -2,6 +2,9 @@
 
 - cloud_1.glb (57 600 tam giác): quá nặng cho hàng chục đám mây. Giảm còn khoảng 1 500 tam giác bằng gộp đỉnh
   theo lưới ô (vertex clustering): mây vốn tròn mềm nên nhìn gần như không khác. Tô trắng, đặt tâm ở gốc.
+- nha_may_nhiet_dien.glb (48 khối): gộp theo màu (48 → vài lệnh vẽ), in vị trí đỉnh ống khói / tháp làm mát.
+- chernobyl_game_complex.glb (148 khối): bỏ nền, gộp theo màu; giữ riêng khối lò số 4 (Reactor4), mái vòm che
+  an toàn (Arch) và thêm khối đổ nát (Reactor4_Ruin); gốc toạ độ đặt tại tâm lò số 4.
 - airplane.glb (20 500 tam giác, 21 khối có màu đỉnh): giữ nguyên hình, gộp thành một lưới (mũi vốn đã hướng −Z),
   đặt đáy ở y = 0 để dùng cho máy bay dân dụng bay ngang bầu trời.
 """
@@ -65,6 +68,84 @@ def airplane():
     print(f'airliner.glb: {len(m.faces)} tam giác, {os.path.getsize(out) // 1024} KB')
 
 
+def parts(path, skip=()):
+    """Các khối của file GLB đã áp biến đổi, kèm tên nút và màu chủ đạo (RGBA 0–255)."""
+    s = trimesh.load(path)
+    for name in s.graph.nodes_geometry:
+        if name in skip: continue
+        T, g = s.graph[name]
+        m = s.geometry[g].copy(); m.apply_transform(T)
+        try: fc = np.asarray(m.visual.face_colors)
+        except Exception: fc = np.full((len(m.faces), 4), 200)
+        cols, cnt = np.unique(fc, axis=0, return_counts=True)
+        yield name, m, tuple(int(c) for c in cols[np.argmax(cnt)])
+
+
+def export_groups(groups, out, double=()):
+    """groups: {tên nhóm: (màu, [lưới])} → một nút / một vật liệu cho mỗi nhóm. double: nhóm là vỏ mỏng, vẽ cả hai mặt."""
+    scene = trimesh.Scene()
+    for name, (color, meshes) in groups.items():
+        m = trimesh.util.concatenate(meshes)
+        m.visual = trimesh.visual.TextureVisuals(material=PBRMaterial(baseColorFactor=list(color[:3]) + [255], metallicFactor=0.05, roughnessFactor=0.75, doubleSided=name in double))
+        scene.add_geometry(m, node_name=name, geom_name=name)
+    scene.export(out)
+    return scene
+
+
+def by_color(items):
+    g = {}
+    for _, m, c in items:
+        key = f'c{c[0]:02x}{c[1]:02x}{c[2]:02x}'
+        g.setdefault(key, (c, []))[1].append(m)
+    return g
+
+
+def thermal():
+    items = list(parts(os.path.join(SRC, 'nha_may_nhiet_dien.glb')))
+    out = os.path.join(OUT, 'thermal-plant.glb')
+    sc = export_groups(by_color(items), out)
+    tris = sum(len(m.faces) for _, m, _ in items)
+    print(f'thermal-plant.glb: {len(items)} khối → {len(sc.geometry)} nhóm màu, {tris} tam giác, {os.path.getsize(out) // 1024} KB')
+    for name, m, c in items:  # ống khói: cao, mảnh; tháp làm mát: cao, to
+        lo, hi = m.bounds; w = max(hi[0] - lo[0], hi[2] - lo[2]); h = hi[1] - lo[1]
+        if h > 6 and w < 9:
+            print(f'   đỉnh {"ống khói" if w < 3 else "tháp làm mát"}: x={(lo[0] + hi[0]) / 2:.2f} y={hi[1]:.2f} z={(lo[2] + hi[2]) / 2:.2f} (rộng {w:.1f})')
+
+
+def ruin_boxes(x0, x1, z0, z1, h):
+    """Khối lò số 4 sau vụ nổ: tường vỡ cao thấp, mất mái, đống đổ nát bên trong."""
+    B = lambda cx, cy, cz, sx, sy, sz: trimesh.creation.box(extents=(sx, sy, sz), transform=trimesh.transformations.translation_matrix((cx, cy, cz)))
+    t, dx, dz, out = 1.2, x1 - x0, z1 - z0, []
+    out.append(B(x0 + t / 2, h / 2, (z0 + z1) / 2, t, h, dz))
+    out.append(B(x1 - t / 2, h * 0.31, (z0 + z1) / 2, t, h * 0.62, dz))
+    for i, k in enumerate((1.0, 0.75, 0.45, 0.3)):
+        out.append(B(x0 + (i + 0.5) * dx / 4, h * k / 2, z0 + t / 2, dx / 4, h * k, t))
+    for i, k in enumerate((0.85, 0.35, 0.65, 0.2)):
+        out.append(B(x0 + (i + 0.5) * dx / 4, h * k / 2, z1 - t / 2, dx / 4, h * k, t))
+    rubble = [(0.25, 0.3, 3), (0.5, 0.55, 4.5), (0.72, 0.35, 2.4), (0.4, 0.72, 3.6), (0.66, 0.7, 2)]
+    return out, [B(x0 + dx * rx, rh / 2, z0 + dz * rz, 4 + i, rh, 3.5) for i, (rx, rz, rh) in enumerate(rubble)]
+
+
+def chernobyl_complex():
+    items = list(parts(os.path.join(SRC, 'chernobyl_game_complex.glb'), skip=('terrain',)))
+    unit4 = lambda n: n in ('hall3', 'roof3') or n.startswith('window3_')
+    groups = by_color([it for it in items if not unit4(it[0]) and it[0] != 'arch_canopy'])
+    r4 = [it for it in items if unit4(it[0])]
+    groups['Reactor4'] = (r4[0][2], [m for _, m, _ in r4])  # gộp thành một nút để bật/tắt khi lò nổ
+    arch = [it for it in items if it[0] == 'arch_canopy'][0]
+    groups['Arch'] = (arch[2], [arch[1]])
+    walls, rubble = ruin_boxes(35, 65, -24.5, 0.5, 14)
+    groups['Reactor4_Ruin'] = ((60, 56, 52, 255), walls)
+    groups['Reactor4_Rubble'] = ((38, 40, 42, 255), rubble)
+    for _, (c, ms) in groups.items():  # gốc toạ độ: tâm lò số 4 (hall3: x 35..65, z −24,5..0,5)
+        for m in ms: m.apply_translation((-50, 0, 12))
+    out = os.path.join(OUT, 'chernobyl-complex.glb')
+    sc = export_groups(groups, out, double=('Arch',))
+    tris = sum(len(g.faces) for g in sc.geometry.values())
+    print(f'chernobyl-complex.glb: {len(items)} khối → {len(sc.geometry)} nhóm, {tris} tam giác, {os.path.getsize(out) // 1024} KB, bounds {np.round(sc.bounds, 1).tolist()}')
+
+
 if __name__ == '__main__':
-    for k in sys.argv[1:] or ['cloud', 'airplane']:
-        {'cloud': cloud, 'airplane': airplane}[k]()
+    ALL = {'cloud': cloud, 'airplane': airplane, 'thermal': thermal, 'chernobyl': chernobyl_complex}
+    for k in sys.argv[1:] or ALL:
+        ALL[k]()

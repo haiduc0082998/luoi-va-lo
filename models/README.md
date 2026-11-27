@@ -8,9 +8,11 @@ Các mô hình dựng từ macro FreeCAD (thư mục `source/`). Ở đây khôn
 | `Cooling_Tower_CAD.FCMacro` | `cooling-tower.glb` | Mọi tháp làm mát (nhà máy hạt nhân, công trình “tháp làm mát”) — tháp 150 m thu về cao 22 đơn vị |
 | `Car_Model_FreeCAD.FCMacro` | `car.glb` | 80 ô tô chạy trong thành phố, mỗi xe được sơn lại một màu |
 | `Male_Mannequin_CAD.FCMacro`, `Female_Mannequin_CAD.FCMacro` | `man.glb`, `woman.glb` | Người đi bộ trong thành phố (nam/nữ xen kẽ, đổi màu áo, quay mặt theo hướng đi) |
-| `Chernobyl_Supercomplex_Expanded_LowPoly.FCMacro` | `chernobyl-supercomplex.glb` | Kịch bản **Lò kiểu RBMK** (đồ hoạ cao) |
+| `Chernobyl_Supercomplex_Expanded_LowPoly.FCMacro` | `chernobyl-supercomplex.glb` | Không còn tải trong game (thay bằng `chernobyl-complex.glb`); muốn dùng lại thì đổi một dòng `loadModel` trong `src/main.js` |
 | `Chernobyl_Power_Plant_PreAccident_LowPoly.FCMacro` | `chernobyl.glb` | Kịch bản **Lò kiểu RBMK** (đồ hoạ thấp) |
 | `cloud_1.glb` (GLB gửi kèm) | `cloud.glb` | 22 đám mây trôi theo gió; giảm 57 600 → ~1 450 tam giác bằng gộp đỉnh theo lưới ô |
+| `nha_may_nhiet_dien.glb` (GLB gửi kèm) | `thermal-plant.glb` | Nhiệt điện Đồi Than (×1,3): khói than ra 2 ống khói, hơi nước ra 2 tháp làm mát; 48 khối gộp thành 13 nhóm màu |
+| `chernobyl_game_complex.glb` (GLB gửi kèm) | `chernobyl-complex.glb` | Kịch bản **Lò kiểu RBMK** (đồ hoạ cao, ×0,18): lò số 4 → đổ nát khi nổ → mái vòm che an toàn khi đang dọn dẹp, thay lõi |
 | `airplane.glb` (GLB gửi kèm) | `airliner.glb` | 3 máy bay chở khách bay ngang bầu trời, đèn chớp về đêm |
 
 | Script | Việc |
@@ -18,7 +20,7 @@ Các mô hình dựng từ macro FreeCAD (thư mục `source/`). Ở đây khôn
 | `cadlite.py` | Bộ lệnh nhỏ thay cho `Part` của FreeCAD (hộp, trụ, côn, cầu elip, capsule, vành khuyên, loft, xoay, đùn mặt) bằng `trimesh`; xuất GLB với trục Y lên, mặt trước nhìn −Z. |
 | `build_models.py` | Dựng lại 6 macro mới. |
 | `build_b737.py` | Dựng lại Boeing 737-800. |
-| `prepare_uploads.py` | Xử lý GLB gửi kèm: giảm lưới mây, gộp và đặt gốc máy bay. |
+| `prepare_uploads.py` | Xử lý GLB gửi kèm: giảm lưới mây, gộp khối theo màu (giảm lệnh vẽ), tách khối cần bật/tắt, đặt gốc toạ độ. |
 
 Ảnh xem trước: `boeing737-800-preview.png` và `models-preview.png`.
 

@@ -55,7 +55,7 @@ export function startupStep(G, dt, staffK = 1) {
     if (job) {
       job.left -= dt * staffK;
       if (job.left <= 0) {
-        const old = unitOf(G, k), R = createReactor({ wind: old.wind });
+        const old = unitOf(G, k), R = createReactor({ wind: old.wind, rbmk: old.rbmk }); // giữ loại lò (RBMK vẫn là RBMK), bảo vệ RPS bật lại
         R.scram = true; R.rod = R.rodCmd = 0; R.T = 300; R.Pf = 0; R.D1 = R.D2 = 0; // lõi mới nạp, đang dừng
         if (k === 2) G.reactor2 = R; else G.reactor = R;
         delete G.repair[k]; G.version++;
