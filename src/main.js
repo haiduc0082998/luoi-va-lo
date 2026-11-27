@@ -8,6 +8,7 @@ import { ORIGIN, lotFromPoint } from './world/cityview.js';
 import { createCityPanel } from './ui/citypanel.js';
 import { loadModel } from './world/kit.js';
 import { createPost } from './world/post.js';
+import { WEATHERS } from './weather.js';
 import * as City from './city.js';
 import { createHud } from './ui/hud.js';
 import { createStage5 } from './ui/stage5.js';
@@ -138,6 +139,8 @@ loadModel(app, 'man', 'models/man.glb');
 loadModel(app, 'woman', 'models/woman.glb');
 loadModel(app, 'chernobyl', 'models/chernobyl.glb');
 loadModel(app, 'supercomplex', 'models/chernobyl-supercomplex.glb');
+loadModel(app, 'cloud', 'models/cloud.glb');
+loadModel(app, 'airliner', 'models/airliner.glb');
 world = buildWorld(app);
 const post = createPost(app, camera.entity);
 window.__post = post; window.__app = app;
@@ -211,7 +214,7 @@ app.on('update', (dt) => {
   camera.update(dtReal);
   world.update(G, dtReal, camera.entity, hud.ui.selection, cityId);
   const hr = Game.hourOfDay(G), night = hr < 6 || hr > 19 ? 1 : hr < 7.5 ? (7.5 - hr) / 1.5 : hr > 17.5 ? (hr - 17.5) / 1.5 : 0;
-  post.mood({ night, storm: G.weather.id === 'storm', rad: Math.max(G.reactor.plume, G.reactor2?.plume ?? 0), dt: dtReal });
+  post.mood({ night, storm: !!WEATHERS[G.weather.id].grey, rad: Math.max(G.reactor.plume, G.reactor2?.plume ?? 0), dt: dtReal });
   if (cityId) cityPanel.render(cityId);
   world.setGhost(G, hud.ui.tool, cursor, lineFrom ? Game.nodeById(G, lineFrom) : null);
   updateTags();
@@ -223,8 +226,8 @@ app.on('update', (dt) => {
 });
 
 // ---------- Phím tắt ----------
-let lastSpeed = 60;
-const SPEEDS = { 1: 1, 2: 10, 3: 60, 4: 300 };
+let lastSpeed = 300;
+const SPEEDS = { 1: 1, 2: 50, 3: 300, 4: 1500 }; // ngày trôi nhanh gấp 5 lần so với trước (trừ 1× thời gian thực)
 window.addEventListener('keydown', (e) => {
   if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); bar.save(); return; }

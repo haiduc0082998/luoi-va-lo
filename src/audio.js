@@ -4,6 +4,8 @@
 // - sấm sau mỗi tia sét (trễ vài trăm ms), còi báo động khi có tin xấu, tiếng "bíp" khi cảnh báo,
 //   tiếng nổ trầm khi có vụ nổ, chuông nhẹ khi hoàn thành nhiệm vụ, tiếng tách khi bấm nút.
 // Trình duyệt chỉ cho phát âm thanh sau thao tác đầu tiên của người chơi, nên chỉ khởi tạo khi đó.
+import { WEATHERS } from './weather.js';
+
 const MUTE_KEY = 'luoi-va-lo/muted';
 
 export function createAudio(G) {
@@ -84,7 +86,7 @@ export function createAudio(G) {
     humGain.gain.setTargetAtTime(hz > 0 ? 0.012 + Math.min(0.05, Math.abs(hz - 50) * 0.04) : 0, t, 0.5);
     windGain.gain.setTargetAtTime(Math.min(0.25, 0.015 + w * 0.009), t, 1);
     windFilter.frequency.setTargetAtTime(300 + w * 35, t, 1);
-    rainGain.gain.setTargetAtTime(G.weather.id === 'storm' ? 0.06 : 0, t, 1.5);
+    rainGain.gain.setTargetAtTime(0.06 * (WEATHERS[G.weather.id].rain ?? 0), t, 1.5);
     if (G.weather.strikes > lastStrikes) { lastStrikes = G.weather.strikes; sfx.thunder(0.3 + Math.random() * 0.8); }
   }
 

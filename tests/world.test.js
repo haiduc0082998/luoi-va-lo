@@ -17,6 +17,7 @@ test('tổ máy số 2: cần công nghệ, xây 3 ngày, rồi phát thêm đi�
   startUnit2(G);
   assert.equal(G.unit2.state, 'building');
   hireToNeed(G); // công trường cần thêm ~700 người, thiếu người thì xây chậm
+  G.world.guards = G.net.nodes.map((n) => n.id); // chặn phá hoại / đánh bom ngẫu nhiên để kiểm thử ổn định
   runHours(G, 80); // ma tuý trong thành phố làm năng suất giảm vài %, nên hơn 3 ngày một chút
   assert.equal(units(G).length, 2);
   assert.ok(G.reactor2.Pe > 9e8);

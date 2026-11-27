@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–9)
+## Có gì trong bản này (Giai đoạn 1–10)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -159,6 +159,24 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - **Tuyên truyền chống phá:** làm xói mòn lòng dân.
   - Cảnh sát, bệnh viện, đài truyền hình làm giảm các mối nguy; có 3 chiến dịch toàn quốc để đẩy lùi nhanh.
 - **Cố vấn** (nút Mẹo): lời khuyên theo tình huống, kèm nút làm ngay (khởi động lại lò, thuê đủ người, mở chiến dịch…), và 12 mẹo chơi.
+
+**Giai đoạn 10: thời tiết ngẫu nhiên, ngày nhanh gấp 5, tối ưu hiệu năng**
+- **Thời tiết ngẫu nhiên:**
+  - 7 kiểu: nắng, gió mạnh, mưa rào, nắng nóng, rét đậm, sương mù, bão.
+  - Chọn ngẫu nhiên theo xác suất, mỗi đợt kéo dài 2–10 giờ; gió giật và nhiệt độ dao động trong từng đợt.
+  - Rét đậm làm tăng nhu cầu sưởi; sương mù và mưa làm trời tối và mù hơn.
+- **Ngày trôi nhanh gấp 5:** các mức tốc độ là 1× (thời gian thực, để xử lý sự cố lò), 50×, 300× (mặc định, một ngày ≈ 4,8 phút), 1500×.
+- **Mô phỏng đa nhịp:**
+  - Lò phản ứng bước 0,05 s; lưới, kinh tế, chính trị bước 0,25–1 s game.
+  - Ở 300× thời gian tính giảm từ khoảng 250 ms còn khoảng 30 ms mỗi giây thực; ở 1500× chỉ khoảng 35 ms.
+- **Giảm draw call khoảng 59%** (3 263 → 1 324 ở góc nhìn mặc định):
+  - Cây cối dùng hardware instancing: 520 cây chỉ 2 draw call.
+  - Dây điện mỗi tuyến gộp thành một lưới động (6 đoạn võng mỗi khoảng cột).
+- **Bóng đổ:** chỉ vẽ lại khi camera di chuyển, còn đứng yên thì 6 khung hình một lần.
+- **Màu dây theo mức tải:** xanh lá dưới 70%, vàng 70–90%, đỏ trên 90%; dây vẫn phát sáng khi quá nhiệt.
+- **Cờ cảnh báo trên thanh chỉ số:** "i" là thông tin, "!" nhấp nháy là nghiêm trọng. Rê chuột để xem nguyên nhân và cách xử lý (ví dụ tần số 50,2 Hz là dư công suất, nên xuất khẩu hoặc giảm lò); bấm để mở Cố vấn.
+- **Nhiên liệu:** hiện số ngày uranium còn đủ theo công suất lò thực tế và sản lượng mỏ. Chạy lò thấp thì tiết kiệm nhiên liệu.
+- **Mô hình mới:** mây (`cloud.glb`, giảm từ 57 600 xuống khoảng 1 450 tam giác) và máy bay chở khách (`airliner.glb`) bay ngang bầu trời.
 
 ## Cấu trúc mã
 

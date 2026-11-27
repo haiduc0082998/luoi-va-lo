@@ -5,7 +5,7 @@ import { clamp, ramp, WIRE_RAMP, FUEL_RAMP } from '../util.js';
 import { RATED, outletTemp, dieselRunning } from '../physics/reactor.js';
 import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
-import { height, WATER_Y, buildable, riverCenter, MAP_HALF, BORDER_X } from '../map.js';
+import { height, WATER_Y, buildable, riverCenter, MAP_HALF, BORDER_X, PADS } from '../map.js';
 import { buildTerrain, animateWater } from './terrain.js';
 import { createInfra } from './infra3d.js';
 import { createCityView } from './cityview.js';
@@ -50,14 +50,30 @@ export function buildWorld(app) {
     ghostBad: mat('#ff5434', { opacity: 0.45, emissive: '#ff5434', ei: 0.6 }),
   };
 
-  // ---------- Cây cối rải rác ----------
-  const rnd = seeded('trees');
-  for (let i = 0; i < 140; i++) {
-    const x = (rnd() - 0.5) * 220, z = (rnd() - 0.5) * 220, y = height(x, z);
-    if (y < 0.3 || y > 10) continue;
-    const s = 0.7 + rnd() * 0.7;
-    ent(world, 'cylinder', [x, y + 1 * s, z], [0.4 * s, 2 * s, 0.4 * s], M.trunk);
-    ent(world, 'cone', [x, y + 3.4 * s, z], [3 * s, 4 * s, 3 * s], M.leaf);
+  // ---------- Cây cối rải rác: hardware instancing (cả rừng chỉ 2 draw call: thân + tán) ----------
+  {
+    const rnd = seeded('trees'), trunks = [], crowns = [], q = new pc.Quat();
+    for (let i = 0; i < 520; i++) {
+      const x = (rnd() - 0.5) * 2 * (MAP_HALF - 8), z = (rnd() - 0.5) * 2 * (MAP_HALF - 8), y = height(x, z);
+      if (y < 0.3 || y > 10) continue;
+      if (PADS.some(([px, pz, r]) => Math.hypot(x - px, z - pz) < r * 1.9 + 4)) continue; // không mọc trong khuôn viên công trình
+      if (Math.abs(x - 4) < 40 && z > -58 && z < 2) continue;                           // khu nhà máy hạt nhân (cả Chernobyl)
+      const s = 0.7 + rnd() * 0.7;
+      trunks.push(new pc.Mat4().setTRS(new pc.Vec3(x, y + 1 * s, z), q, new pc.Vec3(0.4 * s, 2 * s, 0.4 * s)));
+      crowns.push(new pc.Mat4().setTRS(new pc.Vec3(x, y + 3.4 * s, z), q, new pc.Vec3(3 * s, 4 * s, 3 * s)));
+    }
+    const instanced = (type, material, mats) => {
+      const e = new pc.Entity(`trees-${type}`); world.addChild(e);
+      e.addComponent('render', { type, material, castShadows: true, receiveShadows: true });
+      const data = new Float32Array(mats.length * 16);
+      mats.forEach((m, i) => data.set(m.data, i * 16));
+      const vb = new pc.VertexBuffer(app.graphicsDevice, pc.VertexFormat.getDefaultInstancingFormat(app.graphicsDevice), mats.length, { data });
+      e.render.meshInstances[0].setInstancing(vb);
+      e.render.meshInstances[0].cull = false; // hộp bao là của một cây, không dùng để loại khỏi khung nhìn
+      return e;
+    };
+    instanced('cylinder', M.trunk, trunks);
+    instanced('cone', M.leaf, crowns);
   }
 
   // ---------- Hơi nước / khói (một bể hạt dùng chung) ----------
@@ -420,7 +436,32 @@ export function buildWorld(app) {
       const end = i === 0 || i === tops.length - 1, s = end ? 0.5 : 1;
       return new pc.Vec3(p.x + perp.x * o * s, p.y, p.z + perp.z * o * s);
     }));
-    const segs = phases.map(() => Array.from({ length: spans }, () => Array.from({ length: SEG }, () => ent(g, 'box', [0, 0, 0], [0.1, 0.1, 1], wireMat, false))));
+    // Cả 3 pha × mọi khoảng cột × SEG đoạn võng gộp thành MỘT lưới động (1 draw call cho mỗi tuyến),
+    // mỗi đoạn là một lăng trụ vuông mảnh; chỉ dựng lại khi độ võng (theo nhiệt độ dây) đổi.
+    const nSeg = 3 * spans * SEG, wpos = new Float32Array(nSeg * 8 * 3), wnor = new Float32Array(nSeg * 8 * 3), widx = [];
+    for (let k = 0; k < nSeg; k++) {
+      const o = k * 8;
+      for (let c = 0; c < 4; c++) { const c2 = (c + 1) % 4; widx.push(o + c, o + c2, o + 4 + c, o + c2, o + 4 + c2, o + 4 + c); }
+    }
+    const wireMesh = new pc.Mesh(app.graphicsDevice);
+    wireMesh.setPositions(wpos); wireMesh.setNormals(wnor); wireMesh.setIndices(widx); wireMesh.update();
+    const wireEnt = new pc.Entity('wires'); g.addChild(wireEnt);
+    wireEnt.addComponent('render', { meshInstances: [new pc.MeshInstance(wireMesh, wireMat)], castShadows: false });
+    const D = new pc.Vec3(), U = new pc.Vec3(), V = new pc.Vec3(), UP = new pc.Vec3(0, 1, 0), SIDE = new pc.Vec3(1, 0, 0);
+    const prism = (k, a, b, w) => { // ghi lăng trụ thứ k từ a tới b, bán kính w (a = b: suy biến, không thấy)
+      D.sub2(b, a); const L = D.length();
+      if (L < 1e-6) { for (let j = 0; j < 8; j++) wpos.set([a.x, a.y, a.z], (k * 8 + j) * 3); return; }
+      D.mulScalar(1 / L); U.cross(D, Math.abs(D.y) > 0.95 ? SIDE : UP).normalize(); V.cross(U, D).normalize();
+      for (let c = 0; c < 4; c++) {
+        const su = c === 0 || c === 3 ? 1 : -1, sv = c < 2 ? 1 : -1;
+        const nx = U.x * su + V.x * sv, ny = U.y * su + V.y * sv, nz = U.z * su + V.z * sv;
+        for (const [j, p] of [[c, a], [c + 4, b]]) {
+          const i3 = (k * 8 + j) * 3;
+          wpos[i3] = p.x + nx * w; wpos[i3 + 1] = p.y + ny * w; wpos[i3 + 2] = p.z + nz * w;
+          wnor[i3] = nx * 0.7071; wnor[i3 + 1] = ny * 0.7071; wnor[i3 + 2] = nz * 0.7071;
+        }
+      }
+    };
     const mid = Math.floor(spans / 2);
     const at = (k) => new pc.Vec3().lerp(tops[mid], tops[mid + 1], k);
     const fA = fire(g, [0, 0, 0], 0.8, M), fB = fire(g, [0, 0, 0], 0.6, M);
@@ -462,24 +503,26 @@ export function buildWorld(app) {
         const key = `${broken}|${sag.toFixed(2)}`;
         if (key !== lastKey) {
           lastKey = key;
+          let k = 0;
           for (let ph = 0; ph < 3; ph++) {
             const pts = phases[ph];
             for (let s = 0; s < spans; s++) {
               const br = broken && s === mid;
-              for (let i = 0; i < SEG; i++) {
-                const e = segs[ph][s][i];
-                if (br && i === SEG / 2) { e.enabled = false; continue; }
-                e.enabled = true;
+              for (let i = 0; i < SEG; i++, k++) {
                 pointOn(pts[s], pts[s + 1], i / SEG, sag, br, P0);
+                if (br && i === SEG / 2) { prism(k, P0, P0, 0); continue; } // chỗ dây đứt
                 pointOn(pts[s], pts[s + 1], (i + 1) / SEG, sag, br, P1);
-                setBeam(e, P0, P1, 0.12);
+                prism(k, P0, P1, 0.07);
               }
             }
           }
+          wireMesh.setPositions(wpos); wireMesh.setNormals(wnor); wireMesh.update();
         }
         if (selected) { wireMat.diffuse = col('#36b2ff'); wireMat.emissive = col('#36b2ff'); wireMat.emissiveIntensity = 0.6 + 0.4 * Math.sin(t * 5); }
         else {
-          wireMat.diffuse = live ? col('#808c89') : col('#4a4f52');
+          // Màu theo mức tải I/Imax: xanh lá ổn định, vàng cận tải (> 70 %), đỏ quá tải (> 90 %); dây cắt thì xám tối
+          const k = live ? l.I / l.Imax : 0;
+          wireMat.diffuse = !live ? col('#4a4f52') : k > 0.9 ? col('#e0453a') : k > 0.7 ? col('#e8b02a') : col('#5fae6e');
           col255(ramp(WIRE_RAMP, l.Tw), wireMat.emissive);
           wireMat.emissiveIntensity = clamp((l.Tw - 80) / 120, 0, 2.5);
         }
@@ -581,12 +624,23 @@ export function buildWorld(app) {
   let time = 0;
 
   function setQuality(high) { sun.light.castShadows = high; sun.light.numCascades = high ? 3 : 1; hiQuality = high; }
+  // Bóng đổ: chỉ vẽ lại bản đồ bóng khi camera di chuyển, còn khi đứng yên thì 6 khung hình một lần
+  // (đủ cho mặt trời di chuyển chậm và xe cộ nhỏ), tiết kiệm cả một lượt vẽ toàn cảnh mỗi khung hình.
+  sun.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
+  const lastCam = new pc.Mat4(); let shadowFrame = 0;
+  function throttleShadows(camera) {
+    const m = camera.getWorldTransform(), moved = !m.equals(lastCam);
+    if (moved) lastCam.copy(m);
+    shadowFrame++;
+    if (moved || shadowFrame % 6 === 0) sun.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
+  }
 
   function update(G, dt, camera, selection, cityId = null) {
     time += dt;
     sync(G);
+    throttleShadows(camera);
     const hour = hourOfDay(G), w = WEATHERS[G.weather.id];
-    const day = clamp(Math.sin(((hour - 6) / 12) * Math.PI) + 0.15, 0, 1) * (G.weather.id === 'storm' ? 0.55 : 1);
+    const day = clamp(Math.sin(((hour - 6) / 12) * Math.PI) + 0.15, 0, 1) * (1 - (w.dim ?? 0));
     sun.setEulerAngles(35, 30, clamp((hour - 12) * 12, -80, 80));
     // Ban đêm “mặt trời” thành ánh trăng xanh nhạt; nền đêm sáng hơn một chút vì tone mapping ACES nén vùng tối
     sun.light.intensity = 0.32 + 1.1 * day;
@@ -602,10 +656,10 @@ export function buildWorld(app) {
     camera.camera.clearColor = sky; app.scene.fog.color = sky;
     // Sao nhấp nháy nhẹ, đi theo camera để luôn ở “vô cực”
     stars.setPosition(camera.getPosition());
-    starMat.emissiveIntensity = clamp((0.35 - day) * 4, 0, 1) * (G.weather.id === 'storm' || G.weather.id === 'windy' ? 0.25 : 1) * (0.85 + 0.15 * Math.sin(time * 1.7)); starMat.update();
+    starMat.emissiveIntensity = clamp((0.35 - day) * 4, 0, 1) * (1 - 0.8 * w.cover) * (0.85 + 0.15 * Math.sin(time * 1.7)); starMat.update();
     stars.enabled = starMat.emissiveIntensity > 0.01;
     animateWater(time, G.windNow ?? 5);
-    app.scene.fog.start = G.weather.id === 'storm' ? 90 : 200; app.scene.fog.end = G.weather.id === 'storm' ? 330 : 560;
+    app.scene.fog.start = w.fog?.[0] ?? 200; app.scene.fog.end = w.fog?.[1] ?? 560;
     if (mode === 'nation') {
       const fr0 = camera.camera.frustum;
       cull.shown = 0; cull.hidden = 0;

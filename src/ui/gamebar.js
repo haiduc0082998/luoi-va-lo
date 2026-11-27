@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const when = (at) => new Date(at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
 
 export const SHORTCUTS = [
-  ['Space', 'Dừng / chạy tiếp'], ['1–4', 'Tốc độ 1×, 10×, 60×, 300×'], ['Q', 'Công cụ chọn'], ['L', 'Kéo dây'], ['B', 'Mở menu xây dựng'],
+  ['Space', 'Dừng / chạy tiếp'], ['1–4', 'Tốc độ 1×, 50×, 300×, 1500×'], ['Q', 'Công cụ chọn'], ['L', 'Kéo dây'], ['B', 'Mở menu xây dựng'],
   ['X', 'Bán công trình'], ['Esc', 'Huỷ thao tác / rời thành phố'], ['M', 'Tắt / bật âm thanh'], ['Ctrl + S', 'Lưu ván'], ['?', 'Hiện bảng phím tắt'],
 ];
 

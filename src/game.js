@@ -5,7 +5,7 @@ import {
 import { createReactor, stepReactor } from './physics/reactor.js';
 import { rollEngineer, runEngineer } from './engineers.js';
 import { worldStep, createWorld } from './world.js';
-import { createWeather, weatherStep, current as weatherNow, windNow, windFarmMW, hConv, setWeather } from './weather.js';
+import { createWeather, weatherStep, current as weatherNow, windNow, windFarmMW, hConv, setWeather, airTemp } from './weather.js';
 import { createResources, infraStep, count as infraCount } from './infra.js';
 import { citiesStep } from './city.js';
 import { buildable, PADS } from './map.js';
@@ -69,7 +69,7 @@ export function createGame() {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const lines = INITIAL_LINES.map((l) => createLine({ ...l, L: lineLengthKm(byId.get(l.a), byId.get(l.b)), Tw: 30 }));
   return {
-    t: 0, speed: 60, approval: 62, budget: 20, inflation: 2, corruption: 15, priceLevel: 1, Ta: 30,
+    t: 0, speed: 300 /* mặc định 300×: một ngày game ≈ 4,8 phút thực */, approval: 62, budget: 20, inflation: 2, corruption: 15, priceLevel: 1, Ta: 30,
     news: [], listeners: new Set(), protest: false, newsAcc: 0, engAcc: 0,
     net: { nodes, lines }, reactor: createReactor(), reactor2: null, unit2: { state: 'none', progress: 0 },
     coalMax: COAL_MAX, gridFault: false, wasOffsite: true,
@@ -100,7 +100,7 @@ export function clockText(t) {
 export function demandMul(hour, Ta) {
   const day = 0.75 + 0.2 * Math.sin(((hour - 9) / 24) * 2 * Math.PI);
   const evening = 0.18 * Math.exp(-((hour - 19.5) ** 2) / 3);
-  return (day + evening) * (1 + Math.max(0, Ta - 30) * 0.012);
+  return (day + evening) * (1 + Math.max(0, Ta - 30) * 0.012 + Math.max(0, 16 - Ta) * 0.015); // điều hoà khi nóng, sưởi khi rét
 }
 
 export { news };
@@ -182,37 +182,58 @@ function politics(G, dt) {
   if (G.newsAcc > 7200) { G.newsAcc = 0; news(G, WORLD_NEWS[Math.floor(Math.random() * WORLD_NEWS.length)]); }
 }
 
-/** Tiến thời gian thực dtReal giây, chia bước 0,05 s. */
+/**
+ * Mô phỏng đa nhịp: tiến thời gian thực dtReal giây × tốc độ game.
+ *  - Nhịp nhanh 0,05 s game: lò phản ứng (động học neutron, nhiệt lõi), quy trình khởi động, kỹ sư.
+ *  - Nhịp chậm H = 0,25–1 s game: lưới điện, thời tiết, hạ tầng, đô thị, ngoại giao, kinh tế – chính trị.
+ *    Các hằng số thời gian ở đây tính bằng phút đến ngày (nhiệt dây, dầu máy biến áp, lạm phát…) nên bước
+ *    chậm vẫn chính xác, mà ở tốc độ cao chỉ tốn khoảng 1/5–1/20 thời gian tính so với chạy mọi thứ ở 0,05 s.
+ */
+export const FAST_DT = 0.05;
+export const slowTick = (speed) => Math.min(1, Math.max(0.25, speed / 1200));
+
+function slowStep(G, h) {
+  const U = units(G);
+  applyTech(G);
+  const nuc = nodeById(G, 'nuc'), coal = nodeById(G, 'coal'), hyd = nodeById(G, 'hydro');
+  nuc.rated = G.reactor2 ? 2400 : 1200;
+  weatherStep(G, h);
+  const W = weatherNow(G), wind = windNow(G);
+  G.Ta = airTemp(G); G.windNow = wind;
+  const towers = Math.min(3, infraCount(G, 'tower'));
+  U.forEach((r) => (r.dTin = W.dTin - 3 * towers));
+  U.forEach((r) => (r.eff += 0.02 * (level(nuc) - 1))); // nâng cấp tua-bin
+  for (const n of G.net.nodes) if (n.type === 'sub') n.rated = subRated(n);
+  // Thiếu nhân công thì nhà máy không chạy hết công suất (lò hạt nhân vẫn sinh nhiệt, nhưng tua-bin giảm tải)
+  const crew = crewFactor(G);
+  G.repairK = 0.4 + 0.6 * staffRatio(G); // tốc độ sửa chữa theo nhân công (dùng ở nhịp nhanh)
+  const cap = { nuc: nuc.state === 'ok' ? (U.reduce((s, r) => s + r.Pe, 0) / 1e6) * crew : 0, coal: coal.state === 'ok' ? G.coalMax * capMul(coal) * crew : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro * capMul(hyd) * crew : 0 };
+  for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind) * capMul(n) * crew;
+  const exportMW = G.market.exportOn ? G.market.contractMW : 0;
+  stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, hConv: hConv(wind), ...netParams(G) }, (t, d) => netEvent(G, t, d));
+  autoReclose(G, h);
+  const offsite = !G.gridFault && nuc.state === 'ok' && connectedToOtherSource(G.net, 'nuc');
+  if (offsite !== G.wasOffsite) {
+    G.wasOffsite = offsite;
+    news(G, offsite ? 'Nhà máy hạt nhân có lại điện lưới ngoài.' : 'Nhà máy hạt nhân mất điện lưới ngoài! Bơm cần máy phát diesel.', offsite ? '' : 'bad');
+  }
+  U.forEach((R) => (R.offsite = offsite));
+  buildProgress(G, h);
+  infraStep(G, h, U);
+  G.cityAcc += h;
+  if (G.cityAcc >= 60) { citiesStep(G, G.cityAcc); G.cityAcc = 0; }
+  worldStep(G, h);
+  politics(G, h);
+}
+
 export function advance(G, dtReal) {
   if (G.over) return;
-  const total = dtReal * G.speed, n = Math.ceil(total / 0.05);
+  const total = dtReal * G.speed, n = Math.ceil(total / FAST_DT), H = slowTick(G.speed);
+  if (G.slowAcc === undefined) { G.slowAcc = 0; slowStep(G, 1e-3); }
   for (let i = 0; i < n; i++) {
-    const h = total / n;
-    const U = units(G);
-    applyTech(G);
-    const nuc = nodeById(G, 'nuc'), coal = nodeById(G, 'coal'), hyd = nodeById(G, 'hydro');
-    nuc.rated = G.reactor2 ? 2400 : 1200;
-    weatherStep(G, h);
-    const W = weatherNow(G), wind = windNow(G);
-    G.Ta = W.Ta; G.windNow = wind;
-    const towers = Math.min(3, infraCount(G, 'tower'));
-    U.forEach((r) => (r.dTin = W.dTin - 3 * towers));
-    U.forEach((r) => (r.eff += 0.02 * (level(nuc) - 1))); // nâng cấp tua-bin
-    for (const n of G.net.nodes) if (n.type === 'sub') n.rated = subRated(n);
-    // Thiếu nhân công thì nhà máy không chạy hết công suất (lò hạt nhân vẫn sinh nhiệt, nhưng tua-bin giảm tải)
-    const crew = crewFactor(G);
-    const cap = { nuc: nuc.state === 'ok' ? (U.reduce((s, r) => s + r.Pe, 0) / 1e6) * crew : 0, coal: coal.state === 'ok' ? G.coalMax * capMul(coal) * crew : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro * capMul(hyd) * crew : 0 };
-    for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind) * capMul(n) * crew;
-    const exportMW = G.market.exportOn ? G.market.contractMW : 0;
-    stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, hConv: hConv(wind), ...netParams(G) }, (t, d) => netEvent(G, t, d));
-    autoReclose(G, h);
-    const offsite = !G.gridFault && nuc.state === 'ok' && connectedToOtherSource(G.net, 'nuc');
-    if (offsite !== G.wasOffsite) {
-      G.wasOffsite = offsite;
-      news(G, offsite ? 'Nhà máy hạt nhân có lại điện lưới ngoài.' : 'Nhà máy hạt nhân mất điện lưới ngoài! Bơm cần máy phát diesel.', offsite ? '' : 'bad');
-    }
-    U.forEach((R, k) => { R.offsite = offsite; stepReactor(R, h, (t) => reactorEvent(G, t, k + 1)); });
-    startupStep(G, h, 0.4 + 0.6 * staffRatio(G));
+    const h = total / n, U = units(G);
+    U.forEach((R, k) => stepReactor(R, h, (t) => reactorEvent(G, t, k + 1)));
+    startupStep(G, h, G.repairK ?? 1);
     if (G.engineer && G.engAuto) {
       G.engAcc += h;
       if (G.engAcc >= 1) {
@@ -221,13 +242,8 @@ export function advance(G, dtReal) {
         U.forEach((R, k) => runEngineer(G.engineer, R, want, Math.random, (txt, lvl) => news(G, (U.length > 1 ? `Tổ máy ${k + 1}: ` : '') + txt, lvl)));
       }
     }
-    buildProgress(G, h);
-    infraStep(G, h, U);
-    G.cityAcc += h;
-    if (G.cityAcc >= 60) { citiesStep(G, G.cityAcc); G.cityAcc = 0; }
-    worldStep(G, h);
-    politics(G, h);
-    G.t += h;
+    G.t += h; G.slowAcc += h;
+    if (G.slowAcc >= H - 1e-9) { slowStep(G, G.slowAcc); G.slowAcc = 0; }
     if (G.over) { news(G, G.over, 'bad'); break; }
   }
   if (!G.over && total > 0) missionsStep(G, total);

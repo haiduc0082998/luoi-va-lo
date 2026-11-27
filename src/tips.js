@@ -4,6 +4,7 @@ import { needed, staffRatio, hireToNeed } from './workforce.js';
 import { restartState, beginStartup } from './startup.js';
 import { THREATS, CAMPAIGNS, campaign } from './city.js';
 import { units } from './game.js';
+import { fuelBalance } from './infra.js';
 
 /** Danh sách lời khuyên, khẩn cấp trước. lvl: 'bad' | 'warn' | ''. */
 export function advice(G) {
@@ -16,6 +17,8 @@ export function advice(G) {
     if (st === 'repair-loca' || st === 'repair-core') add('bad', `Lò${u} hư hỏng (${st === 'repair-core' ? 'lõi nóng chảy / nổ' : 'vỡ ống sơ cấp'}). Phải sửa chữa trước khi chạy lại.`, 'Bắt đầu sửa chữa', () => beginStartup(G, k));
     if (st === 'nofuel') add('bad', `Lò${u} hết uranium. Nâng cấp mỏ, xây đường tới mỏ, hoặc nhận hàng viện trợ trong tab Ngoại giao.`);
   });
+  const fb = fuelBalance(G, units(G));
+  if (fb.days < 3) add(fb.days < 1 ? 'bad' : 'warn', `Uranium chỉ còn đủ khoảng ${fmt(fb.days, 1)} ngày (lò đốt ${fmt(fb.burn, 2)} t/ngày, mỏ làm ra ${fmt(fb.made, 2)} t/ngày). Giảm công suất lò khi không cần, nâng cấp mỏ, làm đường tới mỏ, hoặc nhận nhiên liệu viện trợ.`);
   const need = needed(G), r = staffRatio(G);
   if (r < 0.95) add('warn', `Thiếu nhân công: có ${fmt(G.staff.hired)}/${fmt(need)} người, nhà máy chỉ chạy ${fmt((0.3 + 0.7 * r) * 100)}% công suất, công trường chậm lại.`, 'Thuê đủ người', () => hireToNeed(G));
 

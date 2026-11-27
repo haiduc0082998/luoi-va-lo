@@ -217,3 +217,12 @@ button{touch-action:manipulation}
 .advice li.bad{border-left-color:var(--hot)}.advice li.warn{border-left-color:var(--amber)}.advice li .btn{justify-self:start}
 .tiplist{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px;color:var(--mute)}
 .rail .badge{position:absolute;top:4px;right:5px;min-width:18px;height:18px;border-radius:9px;background:var(--hot);color:#fff;font:700 11px/18px sans-serif;text-align:center;padding:0 4px}
+
+/* Giai đoạn 10: cờ cảnh báo trên thanh chỉ số */
+.stat>div{position:relative}
+.wflag{position:absolute;top:-2px;right:-14px;width:18px;height:18px;padding:0;border-radius:50%;border:0;font:800 12px/18px sans-serif;cursor:pointer;color:#fff}
+.wflag.info{background:var(--cool)}
+.wflag.bad{background:var(--hot);animation:wblink 1s steps(2,start) infinite}
+@keyframes wblink{to{visibility:hidden}}
+@media(prefers-reduced-motion:reduce){.wflag.bad{animation:none}}
+@media(max-width:760px),(max-height:520px){.wflag{right:-4px;top:-4px;width:16px;height:16px;line-height:16px;font-size:11px}}

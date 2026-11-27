@@ -43,7 +43,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     for (const id of ['speed', 'tools', 'views', 'newKv', 'newA']) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v) === String($(id)._get()));
     for (const b of $('buildMenu').querySelectorAll('[data-b]')) b.setAttribute('aria-pressed', ui.tool === `build:${b.dataset.b}`);
   };
-  seg('speed', [1, 10, 60, 300, 0], (v) => (v ? `${v}×` : 'Dừng'), () => G.speed, (v) => (G.speed = v));
+  seg('speed', [1, 50, 300, 1500, 0], (v) => (v ? `${v}×` : 'Dừng'), () => G.speed, (v) => (G.speed = v));
   seg('tools', ['select', 'build', 'line', 'sell'], (v) => ({ select: 'Chọn', build: 'Xây dựng ▾', line: 'Kéo dây', sell: 'Bán' }[v]), () => (ui.tool.startsWith('build') ? 'build' : ui.tool),
     (v) => { if (v === 'build') { $('buildMenu').hidden = !$('buildMenu').hidden; return; } $('buildMenu').hidden = true; ui.tool = v; onTool(v); });
   $('buildMenu').innerHTML = `<p class="lab">Năng lượng & đô thị</p>${['sub', 'wind', 'tower', 'city'].map((k) => `<button class="bitem" type="button" data-b="${k}"><b>${Infra.BUILDS[k].name}</b><small>${Infra.BUILDS[k].desc}</small><span data-cost="${k}"></span></button>`).join('')}
@@ -285,8 +285,49 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   }
 
   let rowsKey = '';
+  // Cờ cảnh báo trên thanh chỉ số: biểu tượng nhỏ cạnh chỉ số (nhấp nháy khi nghiêm trọng), rê chuột / giữ ngón tay
+  // để xem nguyên nhân và cách xử lý; bấm để mở cửa sổ Cố vấn.
+  function flag(id, level, msg) {
+    const host = $(id)?.parentElement; if (!host) return;
+    let f = host.querySelector('.wflag');
+    if (!level) { if (f) f.remove(); host.removeAttribute('title'); return; }
+    if (!f) {
+      f = document.createElement('button'); f.type = 'button'; f.className = 'wflag';
+      f.addEventListener('click', () => document.querySelector('[data-open=tips]')?.click());
+      host.append(f);
+    }
+    f.textContent = level === 'bad' ? '!' : 'i';
+    f.className = `wflag ${level}`;
+    if (f.title !== msg) { f.title = msg; f.setAttribute('aria-label', msg); host.title = msg; }
+  }
+  function statFlags(S) {
+    const U = Game.units(G), fb = Infra.fuelBalance(G, U), spare = Math.max(0, (S.gen ?? 0) > 0 ? G.net.nodes.reduce((a, n) => a + (n.cap ?? 0), 0) - S.demand : 0);
+    if (!S.hz) flag('hz', 'bad', 'Mất điện toàn lưới: không còn nguồn phát nào nối với phụ tải. Kiểm tra lò (nút Khởi động lại lò) và các tuyến bị cắt.');
+    else if (S.hz < 49.8) flag('hz', 'bad', `Tần số thấp ${fmt(S.hz, 2)} Hz: thiếu công suất phát. Khởi động lại lò nếu đang dừng, nâng công suất nhiệt điện, kéo thêm dây từ nhà máy, hoặc giảm hợp đồng xuất khẩu.`);
+    else if (S.hz >= 50.15) flag('hz', 'info', `Tần số ${fmt(S.hz, 2)} Hz: lưới đang dư khoảng ${fmt(spare)} MW công suất dự phòng. Có thể bán điện qua Cửa khẩu Đông (hợp đồng xuất khẩu) hoặc giảm công suất lò để tiết kiệm uranium.`);
+    else flag('hz', null);
+    const why = [];
+    if (S.demand > 0 && S.served / S.demand < 0.99) why.push(`thiếu điện ${fmt(S.demand - S.served)} MW`);
+    if (G.inflation > 6) why.push(`lạm phát ${fmt(G.inflation, 1)}%`);
+    if (G.corruption > 35) why.push(`tham nhũng ${fmt(G.corruption)}%`);
+    if (G.happiness < 50) why.push(`thành phố kém hạnh phúc (${fmt(G.happiness)}%)`);
+    if (Game.maxRelease(G) > 0) why.push('rò rỉ phóng xạ');
+    if ((G.propaganda ?? 0) > 40) why.push(`tuyên truyền chống phá ${fmt(G.propaganda)}/100`);
+    if (G.world.war) why.push('đang có chiến tranh');
+    flag('apV', G.approval < 45 ? 'bad' : why.length ? 'info' : null, `Lòng dân ${fmt(G.approval)}%${why.length ? `, đang bị kéo xuống vì: ${why.join(', ')}` : ''}. Bấm để xem cố vấn.`);
+    flag('sec', S.demand > 0 && S.served / S.demand < 0.99 ? 'bad' : null, `Chỉ cấp được ${fmt(S.served)}/${fmt(S.demand)} MW. Cần thêm nguồn hoặc đường dây tới thành phố đang thiếu.`);
+    flag('budget', G.budget < 5 ? 'bad' : G.profitPerH < 0 ? 'info' : null, `Ngân sách ${G.profitPerH < 0 ? `đang giảm ${fmt(-G.profitPerH * 24, 1)} triệu USD/ngày` : 'thấp'}: tăng giá điện, xuất khẩu giờ cao điểm 19–20 h, giảm nhiệt điện than (đắt nhất), bớt chi nghiên cứu.`);
+    flag('infl', G.inflation > 6 ? 'bad' : null, 'Lạm phát cao: ngừng in tiền, giữ đủ điện cho dân (thiếu điện đẩy giá lên).');
+    flag('corr', G.corruption > 35 ? 'bad' : null, 'Tham nhũng cao: mọi công trình đắt hơn, nâng cấp dễ thất bại. Mở thanh tra trong cửa sổ Quốc gia, nghiên cứu Kiểm toán.');
+    flag('resU', fb.days < 2 ? 'bad' : fb.days < 6 ? 'info' : null, `Uranium ${fmt(G.res.U, 1)} t: lò đốt ${fmt(fb.burn, 2)} t/ngày (tỉ lệ công suất nhiệt), mỏ làm ra ${fmt(fb.made, 2)} t/ngày → ${Number.isFinite(fb.days) ? `còn đủ khoảng ${fmt(fb.days, 1)} ngày` : 'không thâm hụt'}. Chạy lò thấp hơn để tiết kiệm, nâng cấp mỏ hoặc làm đường tới mỏ.`);
+    const w = weatherNow(G);
+    flag('wx', ['storm', 'heatwave', 'cold'].includes(G.weather.id) ? 'info' : null, G.weather.id === 'storm' ? 'Bão: sét có thể đánh cắt đường dây (rơ-le tự đóng lại sau 30 s); đừng tắt rơ-le lúc này.' : G.weather.id === 'heatwave' ? `Nắng nóng ${fmt(G.Ta)} °C: nhu cầu điều hoà tăng, nước làm mát nóng làm lò kém hiệu quả, dây dễ quá nhiệt.` : `Rét ${fmt(G.Ta)} °C: nhu cầu sưởi tăng, thuỷ điện ít nước hơn.`);
+    void w;
+  }
+
   function render() {
     const S = G.net.summary ?? { demand: 0, served: 0, gen: 0, loss: 0, hz: 0 };
+    statFlags(S);
     set('clock', Game.clockText(G.t));
     { const h = Game.hourOfDay(G); set('skipDN', h >= 7 && h < 20 ? 'Tua tới tối' : 'Tua tới sáng'); } set('budget', money(G.budget));
     set('apV', `${fmt(G.approval)}%`); barSet('apBar', G.approval, G.approval < 30 ? 'var(--hot)' : G.approval < 50 ? 'var(--amber)' : 'var(--cool)');
@@ -296,7 +337,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     set('infl', `${fmt(G.inflation, 1)}%`); $('infl').className = G.inflation > 6 ? 'bad' : '';
     set('corr', `${fmt(G.corruption)}%`); $('corr').className = G.corruption > 35 ? 'bad' : '';
     set('rep', `${fmt(G.reputation)}%`); $('rep').className = G.reputation < 30 ? 'bad' : '';
-    { const w = weatherNow(G); set('wx', `${w.name} · ${fmt(G.windNow ?? 0, 0)} m/s`); $('wx').className = G.weather.id === 'storm' || G.weather.id === 'heatwave' ? 'bad' : ''; set('weatherBtn', `Thời tiết: ${w.name}`); }
+    { const w = weatherNow(G); set('wx', `${w.name} · ${fmt(G.windNow ?? 0, 0)} m/s`); $('wx').className = ['storm', 'heatwave', 'cold'].includes(G.weather.id) ? 'bad' : ''; set('weatherBtn', `Thời tiết: ${w.name}`); }
     set('resU', `${fmt(G.res.U, 1)} t U · ${fmt(G.res.RE, 1)} t ĐH`); $('resU').className = G.res.U < 5 ? 'bad' : '';
     for (const el of $('buildMenu').querySelectorAll('[data-cost]')) { const k = el.dataset.cost, B = Infra.BUILDS[k]; el.textContent = `${money(Infra.buildCost(G, k))}${B.re ? ` + ${B.re} t đất hiếm` : ''}`; }
     for (const b of $('newKv').children) b.hidden = b.dataset.v === '750' && !has(G, 'uhv');

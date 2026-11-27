@@ -115,6 +115,15 @@ export function exportRE(G) {
   news(G, `Xuất khẩu ${RE_LOT} tấn đất hiếm: +${fmt(gain, 2)} triệu USD${count(G, 'port') ? ' (có cảng sông)' : ''}.`);
 }
 
+/** Cân bằng uranium (tấn/ngày): sản lượng mỏ hiện tại, lượng lò đang đốt (tỉ lệ công suất nhiệt), số ngày còn đủ. */
+export function fuelBalance(G, units) {
+  const R = G.res, L = MINE_LEVELS[R.mineLv - 1], mine = G.net.nodes.find((n) => n.id === 'mine');
+  const made = L.U * (mine && mine.state === 'ok' ? mine.frac : 0) * (1 + 0.25 * count(G, 'road'));
+  const burn = units.reduce((s, u) => s + (u.Pf / 3e9) * (u.noFuel ? 0 : 1), 0) * (R.mineLv >= 2 ? 0.8 : 1);
+  const net = made - burn;
+  return { made, burn, net, days: net < 0 ? R.U / -net : Infinity };
+}
+
 /** Một bước: khai thác, đốt nhiên liệu, thu phí cảng / du lịch. Trả về số tháp làm mát phụ. */
 export function infraStep(G, dt, units) {
   const day = dt / 86400, R = G.res, L = MINE_LEVELS[R.mineLv - 1];

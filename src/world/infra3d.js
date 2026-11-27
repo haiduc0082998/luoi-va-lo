@@ -4,6 +4,7 @@ import * as pc from 'playcanvas';
 import { clamp } from '../util.js';
 import { RATED } from '../physics/reactor.js';
 import { riverCenter, height, WATER_Y } from '../map.js';
+import { WEATHERS } from '../weather.js';
 import { col, mat, ent, beam, hollowTower, lamp, seeded, model } from './kit.js';
 
 export const INFRA_PICK = { tower: 10, road: 6, port: 9, airport: 14 };
@@ -162,23 +163,57 @@ export function createInfra(app, world, M, emit, groundY) {
 
   // ---------- Thời tiết ----------
   const cloudMat = mat('#e7ecef', { opacity: 0 });
+  // Mây: mô hình cloud.glb (người chơi gửi, đã giảm còn ~1 450 tam giác), dùng chung vật liệu mờ dần theo độ phủ mây
+  const toCloudMat = (e) => { for (const r of e.findComponents('render')) for (const mi of r.meshInstances) { mi.material = cloudMat; mi.castShadow = false; } };
   const clouds = Array.from({ length: 22 }, (_, i) => {
-    const e = ent(world, 'sphere', [((i * 37) % 360) - 180, 70 + (i % 3) * 8, ((i * 53) % 340) - 170], [40 + (i % 4) * 10, 8, 26 + (i % 3) * 8], cloudMat, false);
+    const L = 40 + (i % 4) * 12;
+    const e = new pc.Entity('cloud'); world.addChild(e);
+    e.setLocalPosition(((i * 37) % 360) - 180, 70 + (i % 3) * 8, ((i * 53) % 340) - 170);
+    e.setLocalScale(L, L * 0.45, L * 1.1); e.setLocalEulerAngles(0, (i * 47) % 360, 0);
+    const tmp = ent(e, 'sphere', [0, 0, 0], [1, 0.5, 0.6], cloudMat, false);
+    model(e, 'cloud', 1, 0, tmp, toCloudMat);
     return e;
   });
+  // Máy bay chở khách bay ngang bầu trời quốc gia (airplane.glb người chơi gửi), đèn chớp trắng về đêm
+  const strobeMat = mat('#ffffff', { emissive: '#ffffff', ei: 0 });
+  const airliners = Array.from({ length: 3 }, (_, i) => {
+    const e = new pc.Entity('airliner'); world.addChild(e);
+    const tmp = ent(e, 'box', [0, 0.6, 0], [5, 1, 5], Mx.plane ?? M.metal);
+    model(e, 'airliner', 2.2, 0, tmp);
+    ent(e, 'sphere', [0, 2.1, 1], [0.25, 0.25, 0.25], strobeMat, false);
+    return { e, wait: i * 25, from: new pc.Vec3(), to: new pc.Vec3(), u: 1, len: 1 };
+  });
+  const relaunch = (a) => {
+    const th = Math.random() * Math.PI * 2, y = 62 + Math.random() * 14, R = 260, off = (Math.random() - 0.5) * 160;
+    a.from.set(Math.cos(th) * R - Math.sin(th) * off, y, Math.sin(th) * R + Math.cos(th) * off);
+    a.to.set(-Math.cos(th) * R - Math.sin(th) * off, y, -Math.sin(th) * R + Math.cos(th) * off);
+    a.len = a.from.distance(a.to); a.u = 0;
+    a.e.setEulerAngles(0, (Math.atan2(-(a.to.x - a.from.x), -(a.to.z - a.from.z)) * 180) / Math.PI, 0);
+  };
+  const AP = new pc.Vec3();
+  let strobeT = 0;
   const rainMat = mat('#c9d6e2', { opacity: 0.55 });
-  const drops = Array.from({ length: 140 }, () => ({ e: ent(world, 'box', [0, -50, 0], [0.08, 2.2, 0.08], rainMat, false), y: Math.random() * 60 }));
+  const drops = Array.from({ length: 140 }, (_, i) => ({ e: ent(world, 'box', [0, -50, 0], [0.08, 2.2, 0.08], rainMat, false), y: Math.random() * 60, k: i / 140 }));
   const bolt = new pc.Entity(); bolt.addComponent('light', { type: 'directional', color: col('#dfe8ff'), intensity: 0, castShadows: false });
   bolt.setEulerAngles(60, 20, 0); world.addChild(bolt);
   let lastStrikes = 0, boltT = 0;
 
   function weather(G, dt, target) {
-    const w = G.weather, kind = w.id, cover = { sunny: 0.15, windy: 0.45, heatwave: 0, storm: 1 }[kind];
-    cloudMat.opacity += ((cover * 0.75) - cloudMat.opacity) * Math.min(1, dt); cloudMat.diffuse = kind === 'storm' ? col('#6b747c') : col('#e7ecef'); cloudMat.update();
-    for (const c of clouds) { const p = c.getLocalPosition(); c.setLocalPosition(p.x > 200 ? -200 : p.x + dt * (G.windNow ?? 5) * 0.8, p.y, p.z); }
-    const raining = kind === 'storm';
+    const w = G.weather, W = WEATHERS[w.id], cover = W.cover;
+    cloudMat.opacity += ((cover * 0.75) - cloudMat.opacity) * Math.min(1, dt); cloudMat.diffuse = W.grey ? col('#6b747c') : col('#e7ecef'); cloudMat.update();
+    for (const c of clouds) { const p = c.getLocalPosition(); c.setLocalPosition(p.x > 230 ? -230 : p.x + dt * (G.windNow ?? 5) * 0.8, p.y, p.z); }
+    strobeT += dt;
+    strobeMat.emissiveIntensity = strobeT % 1.2 < 0.08 ? 6 : 0; strobeMat.update();
+    for (const a of airliners) {
+      if (a.wait > 0) { a.wait -= dt; a.e.enabled = false; continue; }
+      if (a.u >= 1) { relaunch(a); a.e.enabled = true; }
+      a.u += (dt * 24) / a.len; // ~24 đơn vị/giây thực
+      a.e.setPosition(AP.lerp(a.from, a.to, Math.min(1, a.u)));
+      if (a.u >= 1) { a.wait = 8 + Math.random() * 30; a.e.enabled = false; }
+    }
+    const raining = !!W.rain;
     for (const d of drops) {
-      d.e.enabled = raining;
+      d.e.enabled = raining && d.k < W.rain;
       if (!raining) continue;
       d.y -= dt * 45;
       if (d.y < 0) { d.y = 50 + Math.random() * 10; d.x = target.x + (Math.random() - 0.5) * 120; d.z = target.z + (Math.random() - 0.5) * 120; }
