@@ -125,15 +125,22 @@ export function createCityView(app, M) {
 
   // ---------- Xe cộ & người đi bộ (bể đối tượng) ----------
   const streets = Array.from({ length: N + 1 }, (_, k) => (k - HALF - 0.5) * LOT);
+  // Đổi màu sơn từng chiếc / áo từng người trên mô hình dùng chung (thay vật liệu của vài bộ phận)
+  const paint = (names, m) => (e) => { for (const n of names) for (const mi of e.findByName(n)?.render?.meshInstances ?? []) mi.material = m; };
   const cars = Array.from({ length: 80 }, (_, i) => {
     const e = new pc.Entity(); root.addChild(e);
-    ent(e, 'box', [0, 0.75, 0], [1.6, 0.9, 3.2], K.car[i % K.car.length]);
-    ent(e, 'box', [0, 1.35, -0.2], [1.4, 0.6, 1.7], K.car[(i + 2) % K.car.length]);
-    ent(e, 'box', [0, 0.8, -1.62], [1.3, 0.25, 0.06], K.hl, false);
+    const tmp = new pc.Entity(); e.addChild(tmp);
+    ent(tmp, 'box', [0, 0.75, 0], [1.6, 0.9, 3.2], K.car[i % K.car.length]);
+    ent(tmp, 'box', [0, 1.35, -0.2], [1.4, 0.6, 1.7], K.car[(i + 2) % K.car.length]);
+    model(e, 'car', 0.72, 0, tmp, paint(['CarBody', 'Cabin', 'Mirrors'], K.car[i % K.car.length])); // ô tô từ macro FreeCAD (dài 4,5 m)
+    ent(e, 'box', [0, 0.43, -1.66], [0.95, 0.1, 0.05], K.hl, false); // đèn pha sáng về đêm
     return { e, axis: i % 2, line: streets[i % (N + 1)], lane: i % 4 < 2 ? 1 : -1, u: (i * 37) % 130 - 65, v: 6 + (i % 5) };
   });
   const people = Array.from({ length: 110 }, (_, i) => {
-    const e = ent(root, 'box', [0, 0.95, 0], [0.5, 1.4, 0.5], K.person[i % K.person.length], false);
+    const e = new pc.Entity(); root.addChild(e);
+    const tmp = ent(e, 'box', [0, 0.7, 0], [0.5, 1.4, 0.5], K.person[i % K.person.length], false);
+    const woman = i % 2 === 1;
+    model(e, woman ? 'woman' : 'man', woman ? 0.85 : 0.8, 0, tmp, paint(woman ? ['Top'] : ['Chest', 'Abdomen', 'Shoulders'], K.person[i % K.person.length]));
     const li = i % N, lj = Math.floor(i / N) % N;
     return { e, li, lj, u: (i * 0.37) % 1, v: 0.03 + (i % 7) * 0.006, side: i % 4 };
   });
@@ -174,7 +181,8 @@ export function createCityView(app, M) {
       lotCenter(w.li, w.lj, P);
       const e = (LOT - 4.6) / 2, t = w.u * 4, s = Math.floor(t), f = t - s;
       const corners = [[-e, -e], [e, -e], [e, e], [-e, e]], a = corners[s], b = corners[(s + 1) % 4];
-      w.e.setPosition(P.x + a[0] + (b[0] - a[0]) * f, 0.95 + Math.abs(Math.sin(G.t * 3 + w.u * 50)) * 0.08, P.z + a[1] + (b[1] - a[1]) * f);
+      w.e.setPosition(P.x + a[0] + (b[0] - a[0]) * f, Math.abs(Math.sin(G.t * 3 + w.u * 50)) * 0.06, P.z + a[1] + (b[1] - a[1]) * f);
+      w.e.setEulerAngles(0, (Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])) * 180) / Math.PI, 0); // mặt nhìn theo hướng đi
     }
     // Tàu metro
     for (const t of trains) {

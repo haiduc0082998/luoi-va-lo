@@ -1,0 +1,128 @@
+import FreeCAD as App
+import Part
+
+doc = App.newDocument("Chernobyl_Power_Plant_PreAccident")
+
+def feature(name, label, shape, color):
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Label = label
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = color
+    obj.ViewObject.LineColor = (0.16, 0.16, 0.16)
+    return obj
+
+def box(x, y, z, dx, dy, dz):
+    return Part.makeBox(dx, dy, dz, App.Vector(x, y, z))
+
+def cylinder(x, y, z, radius, height, axis=None):
+    if axis is None:
+        axis = App.Vector(0, 0, 1)
+    return Part.makeCylinder(radius, height, App.Vector(x, y, z), axis)
+
+def add_box(name, label, x, y, z, dx, dy, dz, color):
+    return feature(name, label, box(x,y,z,dx,dy,dz), color)
+
+def add_cyl(name, label, x, y, z, radius, height, color):
+    return feature(name, label, cylinder(x,y,z,radius,height), color)
+
+# Low-poly visual recreation of the Chernobyl Nuclear Power Plant site
+# before the 1986 accident. Simplified scenery only; not engineering geometry.
+green = (0.30, 0.43, 0.27)
+concrete = (0.62, 0.63, 0.61)
+roof = (0.35, 0.39, 0.42)
+dark = (0.20, 0.23, 0.25)
+water = (0.25, 0.48, 0.62)
+white = (0.80, 0.82, 0.80)
+red = (0.72, 0.12, 0.09)
+
+# Site base and simple roads
+feature("SiteGround", "Site terrain", box(-180,-120,-3,360,240,3), green)
+add_box("MainRoad", "Main access road", -180,-15,0,360,12,0.25, dark)
+add_box("CrossRoad", "Plant service road", -35,-120,0,12,240,0.25, dark)
+add_box("RailLine", "Rail / service corridor", -180,42,0,360,3,0.2, (0.28,0.28,0.30))
+
+# Four reactor building blocks: large simplified industrial halls.
+# Arranged in two pairs, representing the four operating units before the accident.
+reactor_positions = [(-65,12), (5,12), (-65,62), (5,62)]
+for i, (x,y) in enumerate(reactor_positions, 1):
+    add_box("ReactorBlock{}".format(i), "Reactor Unit {} | main hall".format(i),
+            x,y,0,48,28,17, concrete)
+    add_box("ReactorRoof{}".format(i), "Unit {} | roof".format(i),
+            x-1,y-1,17,50,30,2, roof)
+    add_box("ReactorAnnex{}".format(i), "Unit {} | annex".format(i),
+            x+8,y-8,0,22,8,8, white)
+    # Small rooftop service blocks, purely decorative.
+    add_box("RoofRoom{}".format(i), "Unit {} | rooftop service room".format(i),
+            x+17,y+8,19,10,8,3, dark)
+
+# Turbine halls alongside the reactor units.
+add_box("TurbineHallA", "Turbine hall | units 1-2", -70,-28,0,115,22,12, (0.70,0.71,0.68))
+add_box("TurbineHallRoofA", "Turbine hall roof | A", -70,-28,12,115,22,2, roof)
+add_box("TurbineHallB", "Turbine hall | units 3-4", -70,94,0,115,22,12, (0.70,0.71,0.68))
+add_box("TurbineHallRoofB", "Turbine hall roof | B", -70,94,12,115,22,2, roof)
+
+# Iconic cooling towers: simple hollow-looking hyperbolic silhouette
+# approximated with a few low-poly tapered sections.
+def cooling_tower_shape(cx, cy, basez, height, radius):
+    levels = [
+        (0.00, 1.00),
+        (0.22, 0.82),
+        (0.48, 0.68),
+        (0.72, 0.75),
+        (1.00, 0.88)
+    ]
+    wires = []
+    for hfrac, rfrac in levels:
+        z = basez + height*hfrac
+        r = radius*rfrac
+        edge = Part.makeCircle(r, App.Vector(cx,cy,z), App.Vector(0,0,1))
+        wires.append(Part.Wire([edge]))
+    return Part.makeLoft(wires, True, False)
+
+for i, (cx,cy) in enumerate([(105,25),(135,25)],1):
+    tower = cooling_tower_shape(cx,cy,0,34,13)
+    feature("CoolingTower{}".format(i), "Cooling tower {}".format(i), tower, white)
+    add_cyl("TowerBase{}".format(i), "Cooling tower base ring {}".format(i),
+             cx,cy,0,13.2,1.0, concrete)
+
+# Cooling water channel and reservoir
+feature("CoolingReservoir", "Cooling water reservoir", box(95,-55,-0.5,72,62,0.5), water)
+add_box("WaterChannel", "Cooling water channel", 87,4,0,12,72,0.35, water)
+add_box("WaterChannel2", "Water channel branch", 95,4,0,58,10,0.35, water)
+
+# Stacks, electrical substation, and transmission yard.
+add_cyl("Stack1", "Industrial stack 1", -105,15,0,4.2,38, concrete)
+add_cyl("Stack2", "Industrial stack 2", -117,15,0,3.5,30, white)
+add_box("Substation", "Electrical substation yard", 75,60,0,65,42,2, (0.72,0.72,0.65))
+for i in range(6):
+    add_box("Transformer{}".format(i+1), "Transformer {}".format(i+1),
+            80+i*9,67,2,6,8,5, (0.76,0.60,0.30))
+for i in range(5):
+    add_box("Switchgear{}".format(i+1), "Switchgear row {}".format(i+1),
+            80+i*11,82,2,8,4,7, dark)
+
+# Admin, workshop, warehouse and staff buildings.
+add_box("Administration", "Administration building", -125,-55,0,34,20,9, white)
+add_box("AdminRoof", "Administration roof", -126,-56,9,36,22,1.5, roof)
+add_box("Workshop", "Maintenance workshop", -125,-85,0,42,18,8, concrete)
+add_box("Warehouse", "Warehouse", -80,-85,0,30,18,7, white)
+add_box("ControlServices", "Service building", -25,-85,0,30,18,8, concrete)
+add_box("Gatehouse", "Main gatehouse", -160,-18,0,12,10,5, white)
+
+# Parking and small vehicles (simple low-poly boxes).
+for i in range(8):
+    x = -118 + i*10
+    add_box("Car{}".format(i+1), "Parked service vehicle {}".format(i+1),
+            x,-40,0,5,2.4,1.7, (0.32,0.40,0.52))
+
+# Perimeter fence segments, visually light and easy to hide.
+for x in range(-170,171,20):
+    add_box("FenceNorth{}".format(x), "Perimeter fence", x,112,0,14,0.35,2.2, dark)
+    add_box("FenceSouth{}".format(x), "Perimeter fence", x,-105,0,14,0.35,2.2, dark)
+for y in range(-100,113,20):
+    add_box("FenceWest{}".format(y), "Perimeter fence", -170,y,0,0.35,14,2.2, dark)
+    add_box("FenceEast{}".format(y), "Perimeter fence", 170,y,0,0.35,14,2.2, dark)
+
+doc.recompute()
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()

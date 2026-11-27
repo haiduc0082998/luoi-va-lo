@@ -1,0 +1,154 @@
+import FreeCAD as App
+import Part
+import math
+
+doc = App.newDocument("Stylized_Realistic_Car")
+
+def add_obj(name, label, shape, color=(0.75, 0.08, 0.06)):
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Label = label
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = color
+    obj.ViewObject.LineColor = (0.12, 0.12, 0.12)
+    return obj
+
+def box(x, y, z, dx, dy, dz):
+    return Part.makeBox(dx, dy, dz, App.Vector(x, y, z))
+
+def cylinder_y(x, y, z, radius, length):
+    return Part.makeCylinder(radius, length, App.Vector(x, y, z), App.Vector(0, 1, 0))
+
+def polygon_wire(points):
+    verts = [App.Vector(*pt) for pt in points]
+    verts.append(verts[0])
+    return Part.makePolygon(verts)
+
+def loft_from_sections(sections):
+    wires = [polygon_wire(sec) for sec in sections]
+    return Part.makeLoft(wires, True, False)
+
+# Main body: front is +X, width is along Y, height is Z.
+body_sections = [
+    [( -2.15,-0.72,0.72),(-2.15,0.72,0.72),(-2.00,0.88,1.02),(-1.55,0.88,1.18),(1.55,0.88,1.18),(1.95,0.78,1.02),(2.15,0.65,0.78),(2.15,-0.65,0.78),(1.95,-0.78,1.02),(1.55,-0.88,1.18),(-1.55,-0.88,1.18),(-2.00,-0.88,1.02)],
+]
+# Use orderly YZ rings at several X stations for a smooth, solid car shell.
+body_sections = []
+stations = [
+    (-2.25, 0.62, 0.72),
+    (-1.95, 0.82, 1.00),
+    (-1.45, 0.91, 1.17),
+    ( 1.35, 0.91, 1.17),
+    ( 1.85, 0.80, 1.00),
+    ( 2.15, 0.65, 0.78)
+]
+for x, halfw, topz in stations:
+    bottomz = 0.55
+    ring = [
+        (x,-halfw,bottomz),(x,halfw,bottomz),
+        (x,halfw*0.92,0.83),(x,halfw*0.78,topz),
+        (x,-halfw*0.78,topz),(x,-halfw*0.92,0.83)
+    ]
+    body_sections.append(ring)
+body = loft_from_sections(body_sections)
+add_obj("CarBody", "Car body | main shell", body, (0.72,0.055,0.045))
+
+# Lower chassis and front/rear bumpers.
+add_obj("Chassis", "Lower chassis", box(-2.05,-0.78,0.48,4.0,1.56,0.22), (0.16,0.17,0.19))
+add_obj("FrontBumper", "Front bumper", box(1.92,-0.72,0.53,0.28,1.44,0.22), (0.22,0.23,0.25))
+add_obj("RearBumper", "Rear bumper", box(-2.28,-0.72,0.53,0.25,1.44,0.22), (0.22,0.23,0.25))
+
+# Cabin: roof and sloped windshield/rear glass.
+cabin_sections = [
+    [(-1.18,-0.66,1.12),(-1.18,0.66,1.12),(-0.72,0.58,1.78),(-0.72,-0.58,1.78)],
+    [(-0.48,-0.61,1.20),(-0.48,0.61,1.20),(0.62,0.61,1.72),(0.62,-0.61,1.72)],
+    [(0.92,-0.62,1.12),(0.92,0.62,1.12),(0.62,0.61,1.72),(0.62,-0.61,1.72)]
+]
+# Loft with closed rectangular cross-section rings in YZ at each X.
+cab_rings = []
+for x, w, zlow, zhigh in [(-1.18,0.66,1.12,1.17),(-0.72,0.58,1.30,1.78),(0.25,0.58,1.30,1.78),(0.92,0.62,1.12,1.17)]:
+    cab_rings.append([(x,-w,zlow),(x,w,zlow),(x,w*0.92,zhigh),(x,-w*0.92,zhigh)])
+cabin = loft_from_sections(cab_rings)
+add_obj("Cabin", "Cabin / roof", cabin, (0.78,0.10,0.07))
+
+# Dark glass panels: windshield, rear glass, side windows.
+glass_color = (0.10,0.20,0.27)
+windshield = Part.makePolygon([
+    App.Vector(0.91,-0.55,1.20),App.Vector(0.62,-0.52,1.68),
+    App.Vector(0.62,0.52,1.68),App.Vector(0.91,0.55,1.20),
+    App.Vector(0.91,-0.55,1.20)
+])
+# Slightly thick glass panels for visible surfaces.
+front_glass = Part.Face(Part.Wire(windshield.Edges)).extrude(App.Vector(0.015,0,0))
+add_obj("Windshield", "Front windshield", front_glass, glass_color)
+
+rear_wire = Part.makePolygon([
+    App.Vector(-1.12,-0.55,1.20),App.Vector(-0.75,-0.51,1.68),
+    App.Vector(-0.75,0.51,1.68),App.Vector(-1.12,0.55,1.20),
+    App.Vector(-1.12,-0.55,1.20)
+])
+rear_glass = Part.Face(Part.Wire(rear_wire.Edges)).extrude(App.Vector(-0.015,0,0))
+add_obj("RearGlass", "Rear window", rear_glass, glass_color)
+
+# Side window panes on both sides.
+for side in [-1,1]:
+    y = side * 0.585
+    pane1 = Part.makePolygon([
+        App.Vector(-1.02,y,1.25),App.Vector(-0.67,y,1.67),
+        App.Vector(-0.18,y,1.67),App.Vector(-0.18,y,1.25),
+        App.Vector(-1.02,y,1.25)
+    ])
+    pane2 = Part.makePolygon([
+        App.Vector(-0.08,y,1.25),App.Vector(-0.08,y,1.67),
+        App.Vector(0.50,y,1.67),App.Vector(0.82,y,1.25),
+        App.Vector(-0.08,y,1.25)
+    ])
+    for idx, wire in enumerate([pane1,pane2]):
+        face = Part.Face(Part.Wire(wire.Edges))
+        face = face.extrude(App.Vector(0,side*0.018,0))
+        add_obj("SideGlass{}_{}".format(side,idx), "Side glass", face, glass_color)
+
+# Four tires, rims, and hub centers.
+tire_color = (0.035,0.038,0.042)
+rim_color = (0.62,0.65,0.68)
+for axle_x in [-1.35, 1.35]:
+    for side in [-1,1]:
+        y0 = side * 0.73
+        tire = cylinder_y(axle_x, y0-0.12, 0.62, 0.39, 0.24)
+        add_obj("Tire{}_{}".format(axle_x,side), "Rubber tire", tire, tire_color)
+        rim = cylinder_y(axle_x, y0-0.135, 0.62, 0.235, 0.27)
+        add_obj("Rim{}_{}".format(axle_x,side), "Alloy wheel", rim, rim_color)
+        hub = cylinder_y(axle_x, y0-0.145, 0.62, 0.085, 0.29)
+        add_obj("Hub{}_{}".format(axle_x,side), "Wheel hub", hub, (0.20,0.22,0.24))
+
+# Headlights and rear lamps.
+for side in [-1,1]:
+    head = box(2.02,side*0.38-0.16,0.78,0.12,0.28,0.11)
+    add_obj("Headlight{}".format(side), "Front headlight", head, (0.92,0.91,0.72))
+    tail = box(-2.18,side*0.40-0.13,0.78,0.08,0.24,0.12)
+    add_obj("Taillight{}".format(side), "Rear tail light", tail, (0.85,0.025,0.02))
+
+# Mirrors and door handles.
+for side in [-1,1]:
+    mirror_stem = box(0.55,side*0.82,1.14,0.10,side*0.12,0.05)
+    add_obj("MirrorStem{}".format(side), "Mirror stem", mirror_stem, (0.20,0.20,0.22))
+    mirror = box(0.58,side*0.91,1.16,0.18,0.12,0.10)
+    add_obj("Mirror{}".format(side), "Side mirror", mirror, (0.72,0.06,0.05))
+    handle = box(-0.05,side*0.91,0.98,0.20,0.035,0.035)
+    add_obj("DoorHandle{}".format(side), "Door handle", handle, (0.72,0.72,0.72))
+
+# Simple front grille and license plates.
+grille = box(2.16,-0.30,0.62,0.025,0.60,0.18)
+add_obj("Grille", "Front grille", grille, (0.045,0.05,0.06))
+plate_front = box(2.19,-0.18,0.56,0.025,0.36,0.08)
+add_obj("FrontPlate", "Front plate", plate_front, (0.85,0.86,0.84))
+plate_rear = box(-2.31,-0.18,0.56,0.025,0.36,0.08)
+add_obj("RearPlate", "Rear plate", plate_rear, (0.85,0.86,0.84))
+
+# Ground reference.
+ground = Part.makeBox(12,8,0.05,App.Vector(-6,-4,0))
+ground_obj = add_obj("Ground", "Ground reference (hide if needed)", ground, (0.34,0.36,0.38))
+ground_obj.ViewObject.Transparency = 65
+
+doc.recompute()
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()

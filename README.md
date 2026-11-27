@@ -120,7 +120,7 @@ src/
   world/camera.js      camera quỹ đạo (xoay, di chuyển, thu phóng, cảm ứng)
   ui/hud.js            thanh chỉ số, bảng thanh tra, bảng quốc gia
   ui/stage5.js         bảng Thị trường · Chính trị · Cây công nghệ, màn hình thua
-models/                mô hình 3D: macro FreeCAD Boeing 737-800, script dựng GLB, ảnh xem trước
+models/                mô hình 3D: macro FreeCAD (737, tháp làm mát, ô tô, người nam/nữ, Chernobyl ×2), script dựng GLB (cadlite.py), ảnh xem trước
 public/models/         file GLB game tải lúc chạy
 tests/                 kiểm thử lưới, lò, AZ-3 và vòng chơi
 ```

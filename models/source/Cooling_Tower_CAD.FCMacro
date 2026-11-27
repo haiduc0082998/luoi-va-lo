@@ -1,0 +1,103 @@
+# Hyperbolic natural-draft cooling tower - simplified parametric CAD
+# FreeCAD macro. Educational visualization only; not construction/engineering data.
+# Dimensions are approximate, in meters.
+
+import FreeCAD as App
+import Part
+import math
+from FreeCAD import Vector
+
+doc = App.newDocument("Natural_Draft_Cooling_Tower")
+
+HEIGHT = 150.0
+SHELL_THICKNESS = 0.8
+
+# Profile: (height, outer radius), giving the characteristic hyperbolic waist.
+# Approximate proportions for a large natural-draft cooling tower.
+profile = [
+    (0.0, 59.0),
+    (5.0, 54.0),
+    (12.0, 48.0),
+    (22.0, 41.0),
+    (35.0, 34.5),
+    (50.0, 29.0),
+    (65.0, 25.5),
+    (75.0, 24.0),
+    (85.0, 24.5),
+    (100.0, 26.5),
+    (115.0, 29.5),
+    (130.0, 33.0),
+    (142.0, 36.0),
+    (150.0, 38.0)
+]
+
+def circle_wire(radius, z):
+    edge = Part.makeCircle(radius, Vector(0, 0, z), Vector(0, 0, 1))
+    return Part.Wire([edge])
+
+def add_feature(name, shape, color=(0.78, 0.80, 0.82)):
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = color
+    obj.ViewObject.LineColor = (0.18, 0.20, 0.22)
+    return obj
+
+# Loft a solid exterior from circular section wires.
+outer_wires = [circle_wire(r, z) for z, r in profile]
+outer_solid = Part.makeLoft(outer_wires, True, False)
+
+# Create a slightly extended inner loft to subtract, leaving the tower open
+# at the bottom and top rather than capped.
+inner_profile = []
+for z, r in profile:
+    inner_profile.append((z, max(0.5, r - SHELL_THICKNESS)))
+
+inner_profile.insert(0, (-0.2, profile[0][1] - SHELL_THICKNESS))
+inner_profile.append((HEIGHT + 0.2, profile[-1][1] - SHELL_THICKNESS))
+
+inner_wires = [circle_wire(r, z) for z, r in inner_profile]
+inner_solid = Part.makeLoft(inner_wires, True, False)
+
+shell = outer_solid.cut(inner_solid)
+add_feature("Hyperbolic_Concrete_Shell", shell, (0.76, 0.78, 0.80))
+
+# Reinforced base ring / foundation
+outer_ring = Part.makeCylinder(60.5, 2.0, Vector(0, 0, -2.0))
+inner_ring = Part.makeCylinder(57.5, 2.2, Vector(0, 0, -2.1))
+foundation_ring = outer_ring.cut(inner_ring)
+add_feature("Base_Foundation_Ring", foundation_ring, (0.52, 0.55, 0.58))
+
+# Lower support columns, represented as simple structural piers.
+# They are illustrative and do not reproduce a real tower's reinforcement.
+columns = []
+count = 32
+for i in range(count):
+    angle = 2.0 * math.pi * i / count
+    x = 55.0 * math.cos(angle)
+    y = 55.0 * math.sin(angle)
+    col = Part.makeBox(1.2, 1.2, 10.0, Vector(x - 0.6, y - 0.6, 0.0))
+    columns.append(col)
+
+support_shape = columns[0]
+for item in columns[1:]:
+    support_shape = support_shape.fuse(item)
+add_feature("Illustrative_Base_Piers", support_shape, (0.62, 0.64, 0.66))
+
+# Top rim ring, modeled as a narrow annulus.
+top_outer = Part.makeCylinder(38.2, 1.0, Vector(0, 0, HEIGHT - 1.0))
+top_inner = Part.makeCylinder(37.0, 1.2, Vector(0, 0, HEIGHT - 1.1))
+top_rim = top_outer.cut(top_inner)
+add_feature("Top_Rim", top_rim, (0.70, 0.72, 0.74))
+
+# Water basin: low annular perimeter around the tower footprint.
+basin_outer = Part.makeCylinder(62.0, 1.0, Vector(0, 0, -3.2))
+basin_inner = Part.makeCylinder(59.0, 1.2, Vector(0, 0, -3.3))
+basin = basin_outer.cut(basin_inner)
+add_feature("Basin_Perimeter", basin, (0.50, 0.58, 0.64))
+
+doc.recompute()
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()
+
+print("Simplified natural-draft cooling tower CAD created.")
+print("Save as FCStd. This model is not a construction drawing.")

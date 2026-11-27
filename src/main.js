@@ -121,6 +121,12 @@ const camera = createOrbitCamera(app, canvas, {
 });
 
 loadModel(app, 'b737', 'models/boeing737-800.glb');
+loadModel(app, 'cooling_tower', 'models/cooling-tower.glb');
+loadModel(app, 'car', 'models/car.glb');
+loadModel(app, 'man', 'models/man.glb');
+loadModel(app, 'woman', 'models/woman.glb');
+loadModel(app, 'chernobyl', 'models/chernobyl.glb');
+loadModel(app, 'supercomplex', 'models/chernobyl-supercomplex.glb');
 world = buildWorld(app);
 hud = createHud(G, {
   onTool: (t) => setTool(t),
@@ -184,4 +190,5 @@ Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai tr�
 setTool('select');
 app.start();
 window.__game = G; // để kiểm thử và gỡ lỗi
+window.__enterCity = enterCity;
 window.__build = (type, x, z) => Infra.build(G, type, x, z);

@@ -1,0 +1,117 @@
+# Parametric male human mannequin - simplified FreeCAD CAD model
+# Educational/visualization model only. Approximate proportions, not medical anatomy.
+# Units: millimeters. Run as a FreeCAD macro.
+
+import FreeCAD as App
+import Part
+import math
+from FreeCAD import Vector
+
+doc = App.newDocument("Male_Mannequin_CAD")
+
+# Neutral standing pose, arms slightly away from body
+skin = (0.78, 0.62, 0.48)
+shirt = (0.22, 0.34, 0.48)
+pants = (0.18, 0.22, 0.28)
+shoe = (0.10, 0.12, 0.14)
+joint = (0.42, 0.45, 0.48)
+
+def add_obj(name, shape, color):
+    obj = doc.addObject("PartDesign::Feature", name)
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = color
+    obj.ViewObject.LineColor = (0.12, 0.14, 0.16)
+    return obj
+
+def ellipsoid(center, radii):
+    s = Part.makeSphere(1.0)
+    m = App.Matrix()
+    m.A11 = radii[0]
+    m.A22 = radii[1]
+    m.A33 = radii[2]
+    s = s.transformGeometry(m)
+    s.translate(Vector(center[0], center[1], center[2]))
+    return s
+
+def capsule_between(a, b, radius_a, radius_b=None):
+    if radius_b is None:
+        radius_b = radius_a
+    va = Vector(*a)
+    vb = Vector(*b)
+    direction = vb - va
+    length = direction.Length
+    if length <= 0:
+        return Part.makeSphere(radius_a, va)
+    # tapered cylinder plus spherical joint ends
+    cyl = Part.makeCone(radius_a, radius_b, length, va, direction)
+    sph_a = Part.makeSphere(radius_a, va)
+    sph_b = Part.makeSphere(radius_b, vb)
+    return cyl.fuse(sph_a).fuse(sph_b)
+
+# Coordinate convention: X = left/right, Y = front/back, Z = up.
+# Approximate total height 1780 mm.
+parts = []
+
+# Head and neck
+parts.append(("Head", ellipsoid((0, 0, 1660), (105, 95, 135)), skin))
+parts.append(("Neck", Part.makeCylinder(58, 115, Vector(0, 0, 1510)), skin))
+
+# Torso: chest, abdomen and pelvis, separate editable solids
+parts.append(("Chest", ellipsoid((0, 0, 1370), (225, 125, 205)), shirt))
+parts.append(("Abdomen", ellipsoid((0, 5, 1190), (165, 105, 190)), shirt))
+parts.append(("Pelvis", ellipsoid((0, 0, 1035), (190, 115, 115)), pants))
+
+# Shoulder caps
+for side, label in [(-1, "L"), (1, "R")]:
+    parts.append(("Shoulder_" + label,
+                  ellipsoid((side*235, 0, 1450), (95, 100, 100)), shirt))
+
+# Arms: upper arm, elbow, forearm, wrist, hand
+for side, label in [(-1, "L"), (1, "R")]:
+    shoulder = (side*255, 0, 1435)
+    elbow = (side*350, 0, 1195)
+    wrist = (side*405, 0, 970)
+    hand_end = (side*415, -8, 865)
+    parts.append(("Upper_Arm_" + label,
+                  capsule_between(shoulder, elbow, 72, 58), skin))
+    parts.append(("Elbow_" + label,
+                  ellipsoid(elbow, (58, 58, 58)), skin))
+    parts.append(("Forearm_" + label,
+                  capsule_between(elbow, wrist, 58, 40), skin))
+    parts.append(("Wrist_" + label,
+                  ellipsoid(wrist, (39, 42, 42)), skin))
+    parts.append(("Hand_" + label,
+                  ellipsoid(hand_end, (52, 35, 88)), skin))
+    # Thumb as a small angled segment
+    thumb_a = (side*438, -22, 900)
+    thumb_b = (side*475, -20, 855)
+    parts.append(("Thumb_" + label,
+                  capsule_between(thumb_a, thumb_b, 20, 17), skin))
+
+# Legs: thighs, knees, calves, ankles and feet
+for side, label in [(-1, "L"), (1, "R")]:
+    hip = (side*105, 0, 1000)
+    knee = (side*112, 0, 565)
+    ankle = (side*115, 0, 125)
+    parts.append(("Thigh_" + label,
+                  capsule_between(hip, knee, 105, 75), pants))
+    parts.append(("Knee_" + label,
+                  ellipsoid(knee, (78, 82, 75)), pants))
+    parts.append(("Lower_Leg_" + label,
+                  capsule_between(knee, ankle, 72, 48), pants))
+    parts.append(("Ankle_" + label,
+                  ellipsoid(ankle, (48, 52, 50)), pants))
+    # Foot points forward (-Y)
+    parts.append(("Foot_" + label,
+                  ellipsoid((side*115, -75, 65), (72, 150, 58)), shoe))
+
+# Create independently selectable CAD features
+for name, shape, color in parts:
+    add_obj(name, shape, color)
+
+doc.recompute()
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()
+
+print("Male mannequin CAD created: approx. 1780 mm tall.")
+print("Select File > Save As to save the FreeCAD document.")

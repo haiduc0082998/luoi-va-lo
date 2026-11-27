@@ -1,0 +1,93 @@
+import FreeCAD as App
+import Part
+import math
+from FreeCAD import Vector
+
+doc = App.newDocument("Female_Mannequin")
+
+# Generic adult female mannequin, approximately 1700 mm tall.
+# Educational/visual CAD model only; not medical or manufacturing data.
+
+def ellipsoid(name, center, radii):
+    obj = doc.addObject("Part::Ellipsoid", name)
+    obj.Radius1 = radii[0]
+    obj.Radius2 = radii[1]
+    obj.Radius3 = radii[2]
+    obj.Placement.Base = Vector(center[0], center[1], center[2])
+    return obj
+
+def capsule_between(name, p1, p2, radius, end_radius=None):
+    if end_radius is None:
+        end_radius = radius
+    a = Vector(*p1)
+    b = Vector(*p2)
+    d = b - a
+    length = d.Length
+    if length <= 0:
+        return None
+    # Cylinder with rounded ends, kept as a simple selectable solid.
+    cyl = Part.makeCylinder(radius, length, a, d)
+    s1 = Part.makeSphere(radius, a)
+    s2 = Part.makeSphere(end_radius, b)
+    shape = cyl.fuse(s1).fuse(s2)
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = shape
+    return obj
+
+# Z is vertical; mannequin faces toward -Y.
+# Feet and legs
+ellipsoid("Left_Foot", (-85, -45, 75), (48, 105, 35))
+ellipsoid("Right_Foot", (85, -45, 75), (48, 105, 35))
+
+capsule_between("Left_Lower_Leg", (-85, 0, 115), (-82, 0, 470), 42)
+capsule_between("Right_Lower_Leg", (85, 0, 115), (82, 0, 470), 42)
+
+ellipsoid("Left_Knee", (-82, 0, 475), (47, 48, 52))
+ellipsoid("Right_Knee", (82, 0, 475), (47, 48, 52))
+
+capsule_between("Left_Upper_Leg", (-82, 0, 500), (-72, 0, 850), 58)
+capsule_between("Right_Upper_Leg", (82, 0, 500), (72, 0, 850), 58)
+
+# Pelvis and waist
+ellipsoid("Pelvis", (0, 0, 875), (155, 92, 115))
+ellipsoid("Waist", (0, 8, 1010), (112, 78, 105))
+
+# Torso: abstract smooth forms, no detailed anatomy
+ellipsoid("Torso_Lower", (0, 8, 1110), (145, 92, 145))
+ellipsoid("Torso_Upper", (0, 8, 1255), (190, 100, 145))
+ellipsoid("Chest_Form", (0, -2, 1285), (178, 92, 105))
+
+# Neck and head
+capsule_between("Neck", (0, 5, 1350), (0, 5, 1430), 42)
+ellipsoid("Head", (0, -5, 1510), (92, 105, 125))
+ellipsoid("Nose", (0, -105, 1515), (22, 30, 38))
+
+# Arms, elbows, wrists, hands
+ellipsoid("Left_Shoulder", (-205, 5, 1285), (72, 72, 75))
+ellipsoid("Right_Shoulder", (205, 5, 1285), (72, 72, 75))
+
+capsule_between("Left_Upper_Arm", (-225, 5, 1275), (-305, 0, 1050), 42)
+capsule_between("Right_Upper_Arm", (225, 5, 1275), (305, 0, 1050), 42)
+
+ellipsoid("Left_Elbow", (-305, 0, 1050), (43, 43, 45))
+ellipsoid("Right_Elbow", (305, 0, 1050), (43, 43, 45))
+
+capsule_between("Left_Forearm", (-305, 0, 1030), (-330, -5, 830), 34)
+capsule_between("Right_Forearm", (305, 0, 1030), (330, -5, 830), 34)
+
+ellipsoid("Left_Wrist", (-330, -5, 825), (31, 31, 32))
+ellipsoid("Right_Wrist", (330, -5, 825), (31, 31, 32))
+
+ellipsoid("Left_Hand", (-335, -20, 755), (42, 30, 70))
+ellipsoid("Right_Hand", (335, -20, 755), (42, 30, 70))
+
+doc.recompute()
+
+# Set simple display colors and hide helper overlaps where practical.
+for obj in doc.Objects:
+    if hasattr(obj, "ViewObject"):
+        obj.ViewObject.ShapeColor = (0.82, 0.78, 0.72)
+        obj.ViewObject.LineColor = (0.18, 0.18, 0.18)
+
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()

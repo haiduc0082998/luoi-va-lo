@@ -11,7 +11,7 @@ import { createInfra } from './infra3d.js';
 import { createCityView } from './cityview.js';
 import { canPlace, BUILDS } from '../infra.js';
 import { WEATHERS } from '../weather.js';
-import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid, hollowTower, lamp } from './kit.js';
+import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid, hollowTower, lamp, model } from './kit.js';
 
 const SEG = 6;
 export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0], wind: [0, 9, 0], mine: [8, 13, 0] };
@@ -83,6 +83,7 @@ export function buildWorld(app) {
     }
   };
 
+  let hiQuality = true; // đồ hoạ cao: Chernobyl bản supercomplex; thấp: bản nhẹ
   // ---------- Công trình theo loại ----------
   const builders = {
     nuclear(n, g) {
@@ -110,7 +111,7 @@ export function buildWorld(app) {
       ent(g, 'box', [18, 7.3, 2], [13.4, 0.8, 9.4], M.roof);
       ent(g, 'box', [14, 4, 9], [5, 8, 3], M.metal); // trạm phân phối
       const towers = [[n.x + 18, n.z - 12], [n.x + 36, n.z - 2]].map(([x, z]) => [x, groundY(x, z), z]);
-      for (const [x, y, z] of towers) hollowTower(app, world, [x, y - 0.4, z], M);
+      const towerEnts = towers.map(([x, y, z]) => hollowTower(app, world, [x, y - 0.4, z], M));
       const [tx, ty, tz] = towers[0];
       // Dàn tản nhiệt phụ với quạt quay theo nhiệt độ lõi
       const fans = [-4.5, 0, 4.5].map((dx) => {
@@ -193,13 +194,44 @@ export function buildWorld(app) {
       const plume = ent(world, 'sphere', [0, -50, 0], [1, 1, 1], M.plume, false); plume.enabled = false;
       const flash = light(g, [0, 16, 0], '#ffffff', 160);
       const blaze = fire(g, [0, 9, 0], 2, M);
+      // ---------- Chế độ RBMK: thay cụm VVER bằng nhà máy Chernobyl (2 macro FreeCAD) ----------
+      // Gốc mô hình = tâm khối lò số 4, trùng tâm lõi; quay 180° để khu phụ trợ trải về phía nam, tránh đập thủy điện.
+      const keep = new Set([coreLight, flash, blaze.g, sam, corium, ...debris]);
+      const vver = g.children.filter((c) => !keep.has(c));
+      const CH = 0.08; // 1 m → 0,08 đơn vị: khu 480 × 340 m chiếm 38 × 27 đơn vị. Tỉ lệ & hướng được chọn bằng cách dò
+      // địa hình: khu nhà máy gần như không lấn sông, nền phẳng, không đè lên trạm/đập/mỏ khác
+      const rb = new pc.Entity('rbmk'); rb.setLocalPosition(0, 0.05, 0); rb.setLocalEulerAngles(0, 180, 0); g.addChild(rb);
+      const hiQ = new pc.Entity(), loQ = new pc.Entity(); rb.addChild(hiQ); rb.addChild(loQ);
+      const r4 = [], ruins = [];
+      const grab = (e) => { r4.push(e.findByName('Reactor4')); ruins.push(e.findByName('Reactor4_Ruin')); };
+      model(hiQ, 'supercomplex', CH, 0, null, grab);
+      model(loQ, 'chernobyl', CH, 0, null, grab);
+      // Tấm che lò trên mái gian lò (vị trí lõi), phát sáng theo màu/độ nóng của vòng Cherenkov
+      const lid = ent(g, 'cylinder', [0, 1.65, 0], [1.6, 0.06, 1.6], M.ring, false);
+      const rbTowers = [[120, 22], [155, 22]].map(([X, Y]) => { // tháp làm mát của mô hình (cao 38 m)
+        const x = n.x - (X - 28) * CH, z = n.z + (Y - 73) * CH; return [x, y0, z];
+      });
+      rb.enabled = lid.enabled = false;
+      let wasRbmk = false;
       let pumpRot = 0, acc = 0;
       return (G, dt, t) => {
-        const R = G.reactor;
-        updateU2(G, t); sam.enabled = G.world.guards.includes(n.id);
+        const R = G.reactor, rbmk = !!R.rbmk;
+        if (rbmk !== wasRbmk) {
+          wasRbmk = rbmk;
+          for (const c of vver) c.enabled = !rbmk;
+          for (const e of towerEnts) e.enabled = !rbmk;
+          rb.enabled = rbmk;
+          blaze.g.setLocalPosition(0, rbmk ? 1.2 : 9, 0); // RBMK không có vỏ bọc: cháy than chì ngay trong gian lò
+        }
+        if (rbmk) {
+          hiQ.enabled = hiQuality; loQ.enabled = !hiQuality;
+          r4.forEach((e) => e && (e.enabled = !R.boom)); ruins.forEach((e) => e && (e.enabled = R.boom));
+          lid.enabled = true; lid.setLocalPosition(0, R.boom ? 0.4 : 1.65, 0); // sau nổ: lõi hở giữa đống đổ nát
+        } else lid.enabled = false;
+        updateU2(G, t); if (rbmk) steam2.enabled = false; sam.enabled = G.world.guards.includes(n.id);
         rods.forEach((r) => { const p = r.getLocalPosition(); r.setLocalPosition(p.x, 3.6 + (R.rod / 100) * 5, p.z); });
         col255(ramp(FUEL_RAMP, R.T), M.fuel.emissive); M.fuel.emissiveIntensity = clamp((R.T - 250) / 500, 0.15, 3); M.fuel.update();
-        fuel.forEach((f) => (f.enabled = !R.melt)); corium.enabled = R.melt;
+        fuel.forEach((f) => (f.enabled = !R.melt && !rbmk)); corium.enabled = R.melt;
         coreLight.light.color = R.melt ? col('#ff8a2a') : col('#5cc8ff');
         coreLight.light.intensity = R.melt ? 3 : clamp((R.Pf / RATED) * 2.5, 0, 6);
         col255(ramp(WIRE_RAMP, 30 + (outletTemp(R) - 290) * 3), M.hot.emissive);
@@ -210,7 +242,7 @@ export function buildWorld(app) {
         M.steam.emissive = col('#f2b13a'); M.steam.emissiveIntensity = R.Pe > 0 ? 0.6 : 0; M.steam.update();
         M.lamp.emissive = col(!R.diesel ? '#ff5434' : dieselRunning(R) ? '#36b2ff' : !R.offsite ? '#f2b13a' : '#202020');
         M.lamp.emissiveIntensity = 2; M.lamp.update();
-        dome.enabled = !R.boom; debris.forEach((d) => (d.enabled = R.boom));
+        dome.enabled = !R.boom && !rbmk; debris.forEach((d) => (d.enabled = R.boom));
         M.glass.diffuse = R.boom ? col('#ff8a75') : col('#dbe5e8'); M.glass.update();
         blaze.set(R.boom && R.T > 600, t);
         R.flash = Math.max(0, R.flash - dt * 0.8); flash.light.intensity = R.flash * 10;
@@ -228,7 +260,7 @@ export function buildWorld(app) {
         M.ring.update();
         M.core.emissive = M.ring.emissive; M.core.emissiveIntensity = R.melt ? 0.2 : 0.6 + clamp((R.Pf / RATED) * 1.5, 0, 3) + hotK * 2; M.core.update();
         acc += dt * 5 * clamp((R.Pe + (G.reactor2?.Pe ?? 0)) / (0.33 * RATED), 0, 2);
-        while (acc >= 1) { acc -= 1; const [x, y, z] = towers[Math.random() < 0.5 ? 0 : 1]; emit(x, y + 20, z, '#f3f5f4', 5, 9); }
+        while (acc >= 1) { acc -= 1; const [x, y, z] = (rbmk ? rbTowers : towers)[Math.random() < 0.5 ? 0 : 1]; emit(x, y + (rbmk ? 3.2 : 20), z, '#f3f5f4', rbmk ? 2.5 : 5, rbmk ? 4 : 9); }
       };
     },
 
@@ -518,7 +550,7 @@ export function buildWorld(app) {
   const NIGHT = col('#0b1420'), DAYW = new pc.Color(), FLASH = col('#e8eeff'), sky = new pc.Color();
   let time = 0;
 
-  function setQuality(high) { sun.light.castShadows = high; }
+  function setQuality(high) { sun.light.castShadows = high; hiQuality = high; }
 
   function update(G, dt, camera, selection, cityId = null) {
     time += dt;

@@ -1,0 +1,223 @@
+import FreeCAD as App
+import Part
+import math
+
+doc = App.newDocument("Chernobyl_Supercomplex_Expanded")
+
+# Expanded low-poly historical-inspired site model.
+# Simplified visual reconstruction, not an engineering drawing.
+
+COLORS = {
+    "ground": (0.31,0.43,0.28),
+    "concrete": (0.65,0.66,0.63),
+    "roof": (0.36,0.40,0.43),
+    "dark": (0.18,0.20,0.22),
+    "water": (0.22,0.43,0.58),
+    "white": (0.82,0.83,0.80),
+    "steel": (0.56,0.60,0.62),
+    "yellow": (0.72,0.61,0.34),
+    "red": (0.68,0.12,0.09),
+    "glass": (0.14,0.24,0.29)
+}
+
+groups = {}
+
+def put(group, shape):
+    if group not in groups:
+        groups[group] = []
+    if shape and not shape.isNull():
+        groups[group].append(shape)
+
+def box(x,y,z,dx,dy,dz):
+    return Part.makeBox(dx,dy,dz,App.Vector(x,y,z))
+
+def cyl(x,y,z,r,h,axis=None):
+    if axis is None:
+        axis = App.Vector(0,0,1)
+    return Part.makeCylinder(r,h,App.Vector(x,y,z),axis)
+
+def add_box(group,x,y,z,dx,dy,dz):
+    put(group,box(x,y,z,dx,dy,dz))
+
+def add_cyl(group,x,y,z,r,h,axis=None):
+    put(group,cyl(x,y,z,r,h,axis))
+
+def roofed_building(group,x,y,dx,dy,h,wall=None,roof=None):
+    wall = wall or COLORS["concrete"]
+    roof = roof or COLORS["roof"]
+    add_box(group,x,y,0,dx,dy,h)
+    add_box(group,x-0.8,y-0.8,h,dx+1.6,dy+1.6,1.5)
+
+# Large site ground, perimeter roads and central access.
+add_box("Terrain",-240,-170,-4,480,340,4)
+add_box("Roads",-240,-24,0,480,12,0.3)
+add_box("Roads",-28,-170,0,12,340,0.3)
+add_box("Roads",-240,130,0,480,8,0.3)
+add_box("Roads",145,-170,0,8,340,0.3)
+add_box("Railway",-240,45,0,480,3,0.25)
+add_box("Railway",-90,45,0,3,85,0.25)
+add_box("Railway",80,45,0,3,85,0.25)
+
+# Four operating reactor units, each with main block, annexes and roof equipment.
+units = [(-78,5),(2,5),(-78,58),(2,58)]
+for i,(x,y) in enumerate(units,1):
+    add_box("Reactor Buildings",x,y,0,52,30,18)
+    add_box("Reactor Buildings",x-1,y-1,18,54,32,2)
+    add_box("Reactor Buildings",x+8,y-9,0,26,9,9)
+    add_box("Reactor Buildings",x+15,y+9,20,12,8,3)
+    add_box("Reactor Buildings",x+3,y+23,20,7,4,2)
+    # Simple ventilation and roof service blocks
+    for k in range(3):
+        add_box("Reactor Rooftop Details",x+30+k*5,y+5,20,3,4,2)
+
+# Turbine halls for the four units, long industrial volumes.
+roofed_building("Turbine Halls",-83,-32,122,24,13)
+roofed_building("Turbine Halls",-83,94,122,24,13)
+# Turbine hall skylights
+for x in range(-72,43,15):
+    add_box("Turbine Hall Details",x,-26,14,8,12,1)
+    add_box("Turbine Hall Details",x,100,14,8,12,1)
+
+# Cooling tower near the cooling system (stylized hyperbolic profile).
+def tower(cx,cy,height,radius):
+    levels=[(0,1.0),(0.20,0.84),(0.46,0.69),(0.70,0.75),(1.0,0.88)]
+    wires=[]
+    for f,rf in levels:
+        edge=Part.makeCircle(radius*rf,App.Vector(cx,cy,height*f),App.Vector(0,0,1))
+        wires.append(Part.Wire([edge]))
+    return Part.makeLoft(wires,True,False)
+
+put("Cooling Towers",tower(120,22,38,15))
+put("Cooling Towers",tower(155,22,38,15))
+# Cooling pond and channels
+add_box("Water System",90,-62,0,95,78,0.35)
+add_box("Water System",84,2,0,15,88,0.35)
+add_box("Water System",98,2,0,70,12,0.35)
+add_box("Water System",108,-54,0,8,58,0.35)
+add_box("Water System",160,-54,0,8,58,0.35)
+
+# Pumping station and water intake structures.
+roofed_building("Water System",91,-84,36,20,10)
+add_box("Water System",91,-64,0,36,7,3)
+for x in [98,108,118]:
+    add_cyl("Water System",x,-74,10,2.5,14)
+
+# Electrical switchyard: transformer banks, bus bars and lattice-like supports.
+add_box("Electrical Yard",72,65,0,95,48,2)
+for row in range(3):
+    for col in range(7):
+        x=78+col*11
+        y=70+row*13
+        add_box("Transformers",x,y,2,6,8,5)
+        add_box("Transformers",x+1,y+1,7,4,6,1)
+for x in range(75,160,14):
+    add_box("Switchgear",x,111,2,3,2,12)
+    add_box("Switchgear",x,113,13,3,2,1)
+# Transmission line poles
+for x in [85,125,165,205]:
+    add_box("Power Lines",x,125,0,2,2,24)
+    add_box("Power Lines",x-8,125,21,18,2,1.5)
+    add_box("Power Lines",x-11,125,23,24,2,1)
+
+# Industrial stacks and exhaust structures.
+add_cyl("Stacks",-112,18,0,4.5,42)
+add_cyl("Stacks",-125,18,0,3.5,32)
+add_cyl("Stacks",-112,18,42,5.5,2)
+add_cyl("Stacks",-125,18,32,4.3,2)
+
+# Unit 5 and 6 construction zone: incomplete structures, cranes and materials.
+add_box("Construction Zone",95,70,0,58,38,2)
+add_box("Construction Zone",98,74,0,34,25,14)
+add_box("Construction Zone",98,74,14,34,25,2)
+add_box("Construction Zone",136,75,0,22,28,10)
+# Crane towers and booms
+for x,y in [(115,68),(145,68)]:
+    add_box("Construction Cranes",x,y,0,2,2,32)
+    add_box("Construction Cranes",x-14,y,30,30,2,2)
+    add_box("Construction Cranes",x+10,y,20,1,1,10)
+# Material stacks
+for i in range(6):
+    add_box("Construction Materials",96+i*7,112,0,5,5,2)
+    add_box("Construction Materials",96+i*7,112,2,5,5,2)
+
+# Administrative and support buildings.
+roofed_building("Support Buildings",-142,-60,36,22,10)
+roofed_building("Support Buildings",-142,-92,44,20,8)
+roofed_building("Support Buildings",-92,-92,32,20,8)
+roofed_building("Support Buildings",-42,-92,38,20,9)
+roofed_building("Support Buildings",12,-92,28,18,8)
+roofed_building("Support Buildings",48,-92,24,18,7)
+roofed_building("Support Buildings",-145,92,32,18,8)
+roofed_building("Support Buildings",-104,92,28,18,8)
+
+# Emergency / auxiliary buildings, storage and workshop blocks.
+roofed_building("Auxiliary Buildings",-38,122,42,16,7)
+roofed_building("Auxiliary Buildings",12,122,35,16,7)
+roofed_building("Auxiliary Buildings",55,122,30,16,7)
+add_cyl("Auxiliary Buildings",-22,130,0,3,8)
+add_cyl("Auxiliary Buildings",-12,130,0,3,8)
+
+# Vehicle park: simple low-poly service vehicles.
+for i in range(12):
+    x=-138+(i%6)*9
+    y=-43+(i//6)*6
+    add_box("Vehicles",x,y,0,5.5,2.5,1.8)
+    add_box("Vehicles",x+1,y+0.3,1.8,3,1.9,1)
+
+# Fuel / utility tanks, pipes and pipe racks.
+for x,y,r,h in [(-160,15,5,10),(-148,15,4,8),(-160,32,4,8),(60,-55,5,9)]:
+    add_cyl("Utility Tanks",x,y,0,r,h)
+    add_cyl("Utility Tanks",x,y,h,r,1)
+add_box("Pipe Racks",-95,-38,13,190,3,2)
+for x in range(-90,96,18):
+    add_box("Pipe Racks",x,-39,0,2,5,13)
+add_box("Pipe Racks",20,26,18,3,70,2)
+add_box("Pipe Racks",21,26,0,2,3,18)
+
+# Gate, fence and guard posts.
+for x in range(-220,221,20):
+    add_box("Perimeter",-220+x+0,-145,0,14,0.4,2.5)
+    add_box("Perimeter",-220+x+0,145,0,14,0.4,2.5)
+for y in range(-140,146,20):
+    add_box("Perimeter",-220,y,0,0.4,14,2.5)
+    add_box("Perimeter",220,y,0,0.4,14,2.5)
+roofed_building("Gate",-220,-20,12,12,5)
+roofed_building("Gate",208,-20,12,12,5)
+
+# Simple nearby worker settlement / service area to give the complex scale.
+for i in range(5):
+    roofed_building("Nearby Buildings",-205+i*18,-75,14,12,5)
+    roofed_building("Nearby Buildings",-205+i*18,-95,14,12,5)
+
+# Combine each category into one object to keep the document manageable.
+for group, shapes in groups.items():
+    compound=Part.makeCompound(shapes)
+    obj=doc.addObject("PartDesign::Feature","Group_"+group.replace(" ",""))
+    obj.Label=group
+    obj.Shape=compound
+    if group=="Terrain":
+        obj.ViewObject.ShapeColor=COLORS["ground"]
+        obj.ViewObject.Transparency=15
+    elif group=="Water System":
+        obj.ViewObject.ShapeColor=COLORS["water"]
+    elif group=="Transformers":
+        obj.ViewObject.ShapeColor=COLORS["yellow"]
+    elif group=="Cooling Towers":
+        obj.ViewObject.ShapeColor=COLORS["white"]
+    elif group=="Stacks":
+        obj.ViewObject.ShapeColor=COLORS["concrete"]
+    elif group=="Vehicles":
+        obj.ViewObject.ShapeColor=(0.34,0.40,0.49)
+    elif group=="Perimeter":
+        obj.ViewObject.ShapeColor=COLORS["dark"]
+    elif group=="Construction Cranes":
+        obj.ViewObject.ShapeColor=COLORS["yellow"]
+    elif group=="Construction Materials":
+        obj.ViewObject.ShapeColor=(0.66,0.50,0.34)
+    else:
+        obj.ViewObject.ShapeColor=COLORS["concrete"]
+    obj.ViewObject.LineColor=(0.15,0.15,0.15)
+
+doc.recompute()
+Gui.activeDocument().activeView().viewAxonometric()
+Gui.activeDocument().activeView().fitAll()

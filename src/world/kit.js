@@ -106,16 +106,19 @@ export function hyperboloid(app, parent, p, m, { height = 22, base = 9.5, waist 
 /** Tháp làm mát rỗng ruột: vỏ ngoài sáng, vỏ trong tối, vành miệng, bể nước dưới đáy. */
 export function hollowTower(app, parent, p, M) {
   const g = new pc.Entity(); g.setLocalPosition(p[0], p[1], p[2]); parent.addChild(g);
-  hyperboloid(app, g, [0, 0, 0], M.tower);
-  hyperboloid(app, g, [0, 0.05, 0], M.towerIn, { base: 9.1, waist: 5.45, top: 6.45, inside: true, shadow: false });
-  meshEnt(app, g, new pc.TorusGeometry({ ringRadius: 6.65, tubeRadius: 0.28, segments: 32, sides: 6 }), [0, 22, 0], M.metal);
-  ent(g, 'cylinder', [0, 0.5, 0], [17.5, 0.3, 17.5], M.basin, false);
+  const tmp = new pc.Entity(); g.addChild(tmp); // hình dựng sẵn, dùng trong lúc file mô hình chưa tải xong
+  hyperboloid(app, tmp, [0, 0, 0], M.tower);
+  hyperboloid(app, tmp, [0, 0.05, 0], M.towerIn, { base: 9.1, waist: 5.45, top: 6.45, inside: true, shadow: false });
+  meshEnt(app, tmp, new pc.TorusGeometry({ ringRadius: 6.65, tubeRadius: 0.28, segments: 32, sides: 6 }), [0, 22, 0], M.metal);
   for (let i = 0; i < 12; i++) { // chân cột chữ V quanh đế
     const a = (i / 12) * Math.PI * 2;
-    ent(g, 'box', [Math.cos(a) * 9.4, 0.8, Math.sin(a) * 9.4], [0.5, 1.6, 0.5], M.metal);
+    ent(tmp, 'box', [Math.cos(a) * 9.4, 0.8, Math.sin(a) * 9.4], [0.5, 1.6, 0.5], M.metal);
   }
+  ent(g, 'cylinder', [0, 0.3, 0], [16.4, 0.3, 16.4], M.basin, false); // mặt nước trong bể (lọt trong vỏ 8,7 đơn vị)
+  model(g, 'cooling_tower', TOWER_SCALE, 0, tmp); // tháp 150 m từ macro FreeCAD → cao 22 đơn vị
   return g;
 }
+export const TOWER_SCALE = 22 / 150;
 
 /** Cột đèn đường: thân + bóng phát sáng (vật liệu dùng chung để bật/tắt theo đêm). */
 export function lamp(parent, x, y, z, M) {
@@ -140,10 +143,11 @@ function attach(w) {
   e.setLocalEulerAngles(0, w.yaw, 0);
   w.holder.addChild(e);
   w.fallback?.destroy();
+  w.onReady?.(e);
 }
 /** Gắn mô hình `name` vào `holder` (tỉ lệ, góc quay quanh Y). `fallback` là hình tạm hiển thị trong lúc chờ tải. */
-export function model(holder, name, scale = 1, yaw = 0, fallback = null) {
-  const w = { holder, name, scale, yaw, fallback };
+export function model(holder, name, scale = 1, yaw = 0, fallback = null, onReady = null) {
+  const w = { holder, name, scale, yaw, fallback, onReady };
   if (models[name]) attach(w); else waiting.push(w);
   return holder;
 }
