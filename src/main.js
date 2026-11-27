@@ -7,13 +7,17 @@ import { pick, groundPoint, planePoint } from './world/picking.js';
 import { ORIGIN, lotFromPoint } from './world/cityview.js';
 import { createCityPanel } from './ui/citypanel.js';
 import { loadModel } from './world/kit.js';
+import { createPost } from './world/post.js';
 import * as City from './city.js';
 import { createHud } from './ui/hud.js';
 import { createStage5 } from './ui/stage5.js';
 import * as Infra from './infra.js';
 import { fmt } from './util.js';
+import * as Save from './save.js';
+import { createAudio } from './audio.js';
+import { createGameBar } from './ui/gamebar.js';
 
-const G = Game.createGame();
+const { G, loaded } = Save.boot();
 const canvas = document.getElementById('scene');
 const stage = document.getElementById('stage');
 
@@ -128,17 +132,21 @@ loadModel(app, 'woman', 'models/woman.glb');
 loadModel(app, 'chernobyl', 'models/chernobyl.glb');
 loadModel(app, 'supercomplex', 'models/chernobyl-supercomplex.glb');
 world = buildWorld(app);
+const post = createPost(app, camera.entity);
+window.__post = post; window.__app = app;
 hud = createHud(G, {
   onTool: (t) => setTool(t),
   onView: (v) => camera.go(v),
   onSelect: () => {},
   onQuality: (high) => {
-    world.setQuality(high);
+    world.setQuality(high); post.setQuality(high);
     app.graphicsDevice.maxPixelRatio = high ? Math.min(window.devicePixelRatio || 1, 2) : 1;
     fit();
   },
 });
 const s5 = createStage5(G);
+const audio = createAudio(G);
+const bar = createGameBar(G, audio, { loaded });
 cityPanel = createCityPanel(G, { onExit: exitCity });
 cityPanel.show(false);
 hud.onEnterCity = enterCity;
@@ -179,14 +187,38 @@ app.on('update', (dt) => {
   Game.advance(G, dtReal);
   camera.update(dtReal);
   world.update(G, dtReal, camera.entity, hud.ui.selection, cityId);
+  const hr = Game.hourOfDay(G), night = hr < 6 || hr > 19 ? 1 : hr < 7.5 ? (7.5 - hr) / 1.5 : hr > 17.5 ? (hr - 17.5) / 1.5 : 0;
+  post.mood({ night, storm: G.weather.id === 'storm', rad: Math.max(G.reactor.plume, G.reactor2?.plume ?? 0), dt: dtReal });
   if (cityId) cityPanel.render(cityId);
   world.setGhost(G, hud.ui.tool, cursor, lineFrom ? Game.nodeById(G, lineFrom) : null);
   updateTags();
   hud.render();
   s5.render();
+  audio.update();
+  bar.update();
 });
 
-Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai trạm, hai thành phố và cửa khẩu sang nước láng giềng đang chờ lệnh. Bấm vào công trình để điều khiển.');
+// ---------- Phím tắt ----------
+let lastSpeed = 60;
+const SPEEDS = { 1: 1, 2: 10, 3: 60, 4: 300 };
+window.addEventListener('keydown', (e) => {
+  if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); bar.save(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ') { e.preventDefault(); if (G.speed) { lastSpeed = G.speed; G.speed = 0; } else G.speed = lastSpeed; hud.syncSegs(); }
+  else if (SPEEDS[k]) { G.speed = SPEEDS[k]; hud.syncSegs(); }
+  else if (k === 'escape') { if (cityId) exitCity(); else setTool('select'); bar.toggleKeys(false); }
+  else if (cityId) return;
+  else if (k === 'q') setTool('select');
+  else if (k === 'l') setTool('line');
+  else if (k === 'x') setTool('sell');
+  else if (k === 'b') document.querySelector('#tools [data-v=build]')?.click();
+  else if (k === 'm') { audio.setMuted(!audio.muted); bar.refresh(); }
+  else if (e.key === '?') bar.toggleKeys();
+});
+
+if (!loaded) Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai trạm, hai thành phố và cửa khẩu sang nước láng giềng đang chờ lệnh. Bấm vào công trình để điều khiển.');
 setTool('select');
 app.start();
 window.__game = G; // để kiểm thử và gỡ lỗi

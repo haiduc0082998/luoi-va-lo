@@ -11,6 +11,7 @@ import { citiesStep } from './city.js';
 import { buildable, PADS } from './map.js';
 import { fmt } from './util.js';
 import { news } from './news.js';
+import { missionsStep } from './missions.js';
 const newsRaw = news;
 import { applyTech, netParams, politicsStep, spotPrice, retailEffective, rpPerDay, has } from './policy.js';
 
@@ -71,6 +72,7 @@ export function createGame() {
     decrees: { subsidy: false, monopoly: false, defense: false, martial: false },
     world: createWorld(), weather: createWeather(), res: createResources(), infra: [], cities: {}, happiness: 55, cityAcc: 60, cityVersion: 0,
     tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
+    missions: { done: [], held: {} },
   };
 }
 
@@ -212,6 +214,7 @@ export function advance(G, dtReal) {
     G.t += h;
     if (G.over) { news(G, G.over, 'bad'); break; }
   }
+  if (!G.over && total > 0) missionsStep(G, total);
 }
 
 // ---------- Tổ máy số 2 ----------

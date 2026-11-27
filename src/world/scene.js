@@ -6,7 +6,7 @@ import { RATED, outletTemp, dieselRunning } from '../physics/reactor.js';
 import { lineUsable } from '../physics/network.js';
 import { hourOfDay, nodeById } from '../game.js';
 import { height, WATER_Y, buildable, riverCenter } from '../map.js';
-import { buildTerrain } from './terrain.js';
+import { buildTerrain, animateWater } from './terrain.js';
 import { createInfra } from './infra3d.js';
 import { createCityView } from './cityview.js';
 import { canPlace, BUILDS } from '../infra.js';
@@ -539,8 +539,26 @@ export function buildWorld(app) {
 
   // ---------- Bầu trời ----------
   const sun = new pc.Entity('sun');
-  sun.addComponent('light', { type: 'directional', castShadows: true, shadowResolution: 2048, shadowDistance: 260, shadowBias: 0.3, normalOffsetBias: 0.05, intensity: 1.2 });
+  // Bóng đổ 3 tầng (cascade): sắc nét gần camera, vẫn phủ được cả bản đồ khi nhìn toàn cảnh
+  sun.addComponent('light', { type: 'directional', castShadows: true, shadowResolution: 2048, shadowDistance: 320, numCascades: 3, cascadeDistribution: 0.55, shadowType: pc.SHADOW_PCF3_32F, shadowBias: 0.25, normalOffsetBias: 0.04, intensity: 1.2 });
   world.addChild(sun);
+  // Trời sao: 900 tam giác nhỏ trên vòm bán kính 800, chỉ hiện khi trời tối và quang
+  const starMat = new pc.StandardMaterial();
+  starMat.useLighting = false; starMat.useFog = false; starMat.diffuse = new pc.Color(0, 0, 0);
+  starMat.emissive = new pc.Color(1, 1, 1); starMat.emissiveIntensity = 0; starMat.depthWrite = false; starMat.cull = pc.CULLFACE_NONE;
+  starMat.update();
+  const stars = (() => {
+    const pos = [], rnd = seeded('stars');
+    for (let i = 0; i < 900; i++) {
+      const u = rnd(), v = 0.08 + rnd() * 0.92, th = u * Math.PI * 2, ph = Math.acos(v), R = 800, s = 2.2 + rnd() * 3.2;
+      const c = new pc.Vec3(R * Math.sin(ph) * Math.cos(th), R * Math.cos(ph), R * Math.sin(ph) * Math.sin(th));
+      const t1 = new pc.Vec3().cross(c, pc.Vec3.UP).normalize().mulScalar(s), t2 = new pc.Vec3().cross(c, t1).normalize().mulScalar(s);
+      for (const p of [c.clone().add(t1), c.clone().sub(t1).add(t2), c.clone().sub(t1).sub(t2)]) pos.push(p.x, p.y, p.z);
+    }
+    const mesh = new pc.Mesh(app.graphicsDevice); mesh.setPositions(pos); mesh.setIndices([...Array(pos.length / 3).keys()]); mesh.update();
+    const e = new pc.Entity('stars'); e.addComponent('render', { meshInstances: [new pc.MeshInstance(mesh, starMat)], castShadows: false, receiveShadows: false });
+    world.addChild(e); return e;
+  })();
   // Ánh sáng hắt từ mặt đất (thay cho đèn bán cầu): chiếu ngược lên, màu cỏ, không đổ bóng
   const bounce = new pc.Entity('bounce');
   bounce.addComponent('light', { type: 'directional', castShadows: false, color: col('#7f9e6a'), intensity: 0.25 });
@@ -550,7 +568,7 @@ export function buildWorld(app) {
   const NIGHT = col('#0b1420'), DAYW = new pc.Color(), FLASH = col('#e8eeff'), sky = new pc.Color();
   let time = 0;
 
-  function setQuality(high) { sun.light.castShadows = high; hiQuality = high; }
+  function setQuality(high) { sun.light.castShadows = high; sun.light.numCascades = high ? 3 : 1; hiQuality = high; }
 
   function update(G, dt, camera, selection, cityId = null) {
     time += dt;
@@ -558,15 +576,23 @@ export function buildWorld(app) {
     const hour = hourOfDay(G), w = WEATHERS[G.weather.id];
     const day = clamp(Math.sin(((hour - 6) / 12) * Math.PI) + 0.15, 0, 1) * (G.weather.id === 'storm' ? 0.55 : 1);
     sun.setEulerAngles(35, 30, clamp((hour - 12) * 12, -80, 80));
-    sun.light.intensity = 0.08 + 1.3 * day;
-    bounce.light.intensity = 0.05 + 0.28 * day;
-    sun.light.color = hour > 6 && hour < 8.5 || hour > 16.5 && hour < 19 ? col('#ffd9a8') : col('#fff4e0');
-    app.scene.ambientLight.set(0.1 + 0.3 * day, 0.12 + 0.32 * day, 0.16 + 0.32 * day);
+    // Ban đêm “mặt trời” thành ánh trăng xanh nhạt; nền đêm sáng hơn một chút vì tone mapping ACES nén vùng tối
+    sun.light.intensity = 0.32 + 1.1 * day;
+    bounce.light.intensity = 0.06 + 0.28 * day;
+    sun.light.color = day < 0.12 ? col('#9fb7e8') : hour > 6 && hour < 8.5 || hour > 16.5 && hour < 19 ? col('#ffd9a8') : col('#fff4e0');
+    // Màu nền tính theo gamma (PlayCanvas đổi sang tuyến tính): đêm trăng xanh lam, ngày trung tính
+    app.scene.ambientLight.set(0.38 - 0.03 * day, 0.42 - 0.04 * day, 0.52 - 0.1 * day);
+    app.scene.exposure = 1 + 0.7 * (1 - day) ** 2; // mắt thích nghi bóng tối: phơi sáng cao hơn về đêm
     DAYW.fromString(w.sky);
     sky.lerp(NIGHT, DAYW, day);
     const flashK = infra.weather(G, dt, camera.getPosition());
     if (flashK > 0.5) sky.lerp(sky, FLASH, 0.6);
     camera.camera.clearColor = sky; app.scene.fog.color = sky;
+    // Sao nhấp nháy nhẹ, đi theo camera để luôn ở “vô cực”
+    stars.setPosition(camera.getPosition());
+    starMat.emissiveIntensity = clamp((0.35 - day) * 4, 0, 1) * (G.weather.id === 'storm' || G.weather.id === 'windy' ? 0.25 : 1) * (0.85 + 0.15 * Math.sin(time * 1.7)); starMat.update();
+    stars.enabled = starMat.emissiveIntensity > 0.01;
+    animateWater(time, G.windNow ?? 5);
     app.scene.fog.start = G.weather.id === 'storm' ? 90 : 200; app.scene.fog.end = G.weather.id === 'storm' ? 330 : 560;
     infra.update(G, dt, day);
 

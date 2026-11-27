@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–6)
+## Có gì trong bản này (Giai đoạn 1–7)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -97,6 +97,25 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - Dưới 55% thì ngược lại.
 - Mọi dịch vụ đều tốn chi phí vận hành mỗi ngày và tiêu thụ điện thật trong lưới.
 
+**Giai đoạn 7: nâng cấp đồ hoạ và lối chơi**
+- **Hậu kỳ hình ảnh** (CameraFrame của PlayCanvas):
+  - Tone mapping ACES.
+  - Bloom cho mọi vật phát sáng: vòng Cherenkov, đèn đường, cửa sổ, lửa.
+  - Che sáng môi trường SSAO, chỉnh màu và viền tối.
+  - Không khí thay đổi theo tình huống: bão thì xám lạnh, có phóng xạ thì ngả vàng xanh và bạc màu.
+- **Bóng đổ 3 tầng (cascade):** sắc nét khi nhìn gần, vẫn phủ cả bản đồ khi nhìn toàn cảnh.
+- **Mặt nước gợn sóng:** hai lớp normal map dựng bằng code, trôi nhanh hơn và gợn mạnh hơn khi gió lớn.
+- **Đêm trăng:** ánh trăng xanh nhạt, mắt "thích nghi bóng tối" (tăng độ phơi sáng), trời sao nhấp nháy và mờ đi khi trời mây gió.
+- **Lưu / tải ván chơi** vào trình duyệt:
+  - Có một ô lưu tay (Ctrl + S) và bản tự lưu mỗi ngày game, cũng như khi đóng tab.
+  - Nút "Ván mới" bắt đầu lại từ đầu.
+- **Âm thanh tổng hợp** (WebAudio, không cần file):
+  - Tiếng ù máy biến áp ở 2 × tần số lưới, nghe lệch cao độ khi lưới lệch tần số.
+  - Gió và mưa theo thời tiết, sấm sau tia sét.
+  - Còi báo động, tiếng nổ, chuông hoàn thành nhiệm vụ.
+- **12 nhiệm vụ có thưởng** (tab Nhiệm vụ): lưới ổn định 24 giờ, không ai thiếu điện, điện gió, xuất khẩu, metro đầu tiên, tổ máy 2, láng giềng hữu hảo… Nhiệm vụ "suốt X giờ" phải giữ điều kiện liên tục.
+- **Phím tắt:** Space dừng/chạy, 1–4 đổi tốc độ, Q/L/B/X đổi công cụ, Esc huỷ hoặc rời thành phố, M tắt âm thanh, ? xem bảng phím.
+
 ## Cấu trúc mã
 
 ```
@@ -119,7 +138,12 @@ src/
   world/picking.js     chọn công trình/đường dây bằng chuột
   world/camera.js      camera quỹ đạo (xoay, di chuyển, thu phóng, cảm ứng)
   ui/hud.js            thanh chỉ số, bảng thanh tra, bảng quốc gia
-  ui/stage5.js         bảng Thị trường · Chính trị · Cây công nghệ, màn hình thua
+  ui/stage5.js         bảng Thị trường · Chính trị · Cây công nghệ · Nhiệm vụ, màn hình thua
+  ui/gamebar.js        thanh ván chơi: lưu, tải, ván mới, âm thanh, phím tắt, tự lưu
+  save.js              lưu / tải ván vào localStorage (giữ Set, getter, số vô cực)
+  missions.js          nhiệm vụ và phần thưởng
+  audio.js             âm thanh tổng hợp bằng WebAudio
+  world/post.js        hậu kỳ: tone mapping, bloom, SSAO, chỉnh màu theo không khí
 models/                mô hình 3D: macro FreeCAD (737, tháp làm mát, ô tô, người nam/nữ, Chernobyl ×2), script dựng GLB (cadlite.py), ảnh xem trước
 public/models/         file GLB game tải lúc chạy
 tests/                 kiểm thử lưới, lò, AZ-3 và vòng chơi
@@ -130,7 +154,7 @@ Phần vật lý tách khỏi engine, nên kiểm thử được bằng Node và
 ## Ý tưởng mở rộng
 
 - Điện mặt trời và pin lưu trữ để tích điện ban đêm, bán giờ cao điểm.
-- Lưu và tải ván chơi; bảng thành tích.
+- Bảng thành tích, nhiều ô lưu, xuất/nhập file lưu.
 - Mỗi nước láng giềng có lưới điện riêng mô phỏng thật, có thể mua điện khi mình thiếu.
 
 > Mô hình đã đơn giản hoá cho trò chơi. Các con số đúng bậc độ lớn, không dùng để thiết kế thật.

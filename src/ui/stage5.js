@@ -5,6 +5,7 @@ import * as P from '../policy.js';
 import * as W from '../world.js';
 import * as I from '../infra.js';
 import { WEATHERS, WEATHER_ORDER, windFarmMW, setWeather } from '../weather.js';
+import { MISSIONS, progress as missionProgress, rewardText, missionState } from '../missions.js';
 
 const $ = (id) => document.getElementById(id);
 const set = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textContent = v; };
@@ -16,7 +17,7 @@ export function createStage5(G) {
   let tab = 'market';
   root.innerHTML = `
     <div class="s5head"><h2>Điều hành quốc gia</h2>
-      <div class="seg" id="s5tabs">${[['market', 'Thị trường điện'], ['politics', 'Chính trị'], ['world', 'Ngoại giao & quân sự'], ['res', 'Tài nguyên & thời tiết'], ['tech', 'Cây công nghệ']].map(([k, l]) => `<button type="button" data-v="${k}">${l}</button>`).join('')}</div></div>
+      <div class="seg" id="s5tabs">${[['market', 'Thị trường điện'], ['politics', 'Chính trị'], ['world', 'Ngoại giao & quân sự'], ['res', 'Tài nguyên & thời tiết'], ['tech', 'Cây công nghệ'], ['missions', 'Nhiệm vụ']].map(([k, l]) => `<button type="button" data-v="${k}">${l}</button>`).join('')}</div></div>
     <div class="s5body" data-tab="market">
       <div class="cols3">
         <div>
@@ -101,6 +102,10 @@ export function createStage5(G) {
           <h3 class="sp">Giao thông</h3><p class="note" id="trNote"></p>
         </div>
       </div>
+    </div>
+    <div class="s5body" data-tab="missions" hidden>
+      <p class="note" id="misNote"></p>
+      <ol class="missions" id="missions">${MISSIONS.map((m) => `<li data-m="${m.id}"><b>${m.name}</b><small>${m.desc}</small><span class="rw">Thưởng: ${rewardText(m.reward)}</span><div class="meter wide"><i></i></div><em></em></li>`).join('')}</ol>
     </div>
     <div class="s5body" data-tab="tech" hidden>
       <div class="techtop">
@@ -231,6 +236,17 @@ export function createStage5(G) {
       set('wHydro', `${fmt(w.hydro * 100)}% → ${fmt(250 * w.hydro)} MW tối đa`);
       set('wNote', { sunny: 'Vận hành bình thường.', windy: 'Gió mạnh: trại gió phát gần định mức, dây dẫn tản nhiệt tốt hơn.', heatwave: 'Nắng nóng: nước làm mát nóng nên lò phải giảm công suất, dây khó tản nhiệt, nhu cầu điều hoà tăng. Tháp làm mát phụ giúp bù lại.', storm: 'Bão: sét đánh cắt tuyến (tự đóng lại sau 30 giây nếu rơ-le bật, cháy dây nếu rơ-le tắt), mưa làm hồ thủy điện đầy hơn. Gió trên 25 m/s thì trại gió ngắt bảo vệ.' }[G.weather.id]);
       set('trNote', `Cao tốc ${I.count(G, 'road')}/2 · Cảng sông ${I.count(G, 'port')} · Sân bay ${I.count(G, 'airport')}. Xây ở nút “Xây dựng ▾” trên bản đồ.`);
+    }
+    if (tab === 'missions') {
+      const S = missionState(G);
+      set('misNote', `Đã hoàn thành ${S.done.length}/${MISSIONS.length} nhiệm vụ. Nhiệm vụ có chữ “suốt” cần giữ điều kiện liên tục; trượt là đếm lại từ đầu.`);
+      for (const m of MISSIONS) {
+        const li = root.querySelector(`[data-m="${m.id}"]`), p = missionProgress(G, m), done = S.done.includes(m.id);
+        li.classList.toggle('done', done);
+        li.querySelector('i').style.width = `${(p * 100).toFixed(1)}%`;
+        const t = done ? 'Hoàn thành' : m.hold ? `Đã giữ ${fmt((S.held[m.id] ?? 0) / 3600, 1)}/${fmt(m.hold / 3600)} giờ` : `${fmt(p * 100)}%`;
+        const em = li.querySelector('em'); if (em.textContent !== t) em.textContent = t;
+      }
     }
     if (tab === 'tech') {
       set('rp', fmt(G.rp, 1)); set('rpRate', `+${fmt(P.rpPerDay(G), 1)} điểm/ngày`);

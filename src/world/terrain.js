@@ -1,6 +1,7 @@
 // Địa hình low-poly (đổ bóng phẳng, tô màu theo độ cao) và mặt nước sông.
 import * as pc from 'playcanvas';
 import { height, MAP_HALF, WATER_Y } from '../map.js';
+import { seeded } from '../rng.js';
 
 const STEPS = 72;
 
@@ -46,9 +47,14 @@ export function buildTerrain(app, parent) {
   parent.addChild(e);
 
   const wmat = new pc.StandardMaterial();
-  wmat.diffuse = new pc.Color().fromString('#2a6d93'); wmat.gloss = 0.9; wmat.opacity = 0.88;
-  wmat.blendType = pc.BLEND_NORMAL; wmat.depthWrite = false; wmat.useMetalness = true; wmat.metalness = 0.1;
+  wmat.diffuse = new pc.Color().fromString('#2a6d93'); wmat.gloss = 0.92; wmat.opacity = 0.86;
+  wmat.blendType = pc.BLEND_NORMAL; wmat.depthWrite = false; wmat.useMetalness = true; wmat.metalness = 0.15;
+  // Gợn sóng: hai lớp normal map dựng bằng code, trôi theo hai hướng khác nhau (xem animateWater)
+  const waves = waveNormalTexture(app);
+  wmat.normalMap = waves; wmat.normalMapTiling = new pc.Vec2(18, 18); wmat.bumpiness = 0.55;
+  wmat.normalDetailMap = waves; wmat.normalDetailMapTiling = new pc.Vec2(47, 47); wmat.normalDetailMapBumpiness = 0.5;
   wmat.update();
+  waterMat = wmat;
   const water = new pc.Entity('water');
   water.addComponent('render', { type: 'plane', material: wmat, castShadows: false });
   water.setLocalPosition(0, WATER_Y, 0); water.setLocalScale(size, 1, size);
@@ -73,4 +79,34 @@ export function rayTerrain(origin, dir, out) {
     prev = t;
   }
   return null;
+}
+
+let waterMat = null;
+/** Cho mặt nước trôi: gọi mỗi khung hình với thời gian thực (giây) và tốc độ gió (m/s). */
+export function animateWater(t, wind = 5) {
+  if (!waterMat) return;
+  const v = 0.004 + wind * 0.0012;
+  waterMat.normalMapOffset.set(t * v, t * v * 0.6);
+  waterMat.normalDetailMapOffset.set(-t * v * 0.8, t * v * 1.1);
+  waterMat.bumpiness = 0.35 + Math.min(wind, 25) * 0.03;
+  waterMat.update();
+}
+
+/** Normal map lặp liền mạch 128×128 từ tổng các sóng sin (hướng và bước sóng ngẫu nhiên cố định). */
+function waveNormalTexture(app) {
+  const N = 128, h = new Float32Array(N * N), rnd = seeded('waves');
+  const waves = Array.from({ length: 9 }, () => ({ kx: Math.round(rnd() * 8 - 4) || 1, kz: Math.round(rnd() * 8 - 4), a: 0.4 + rnd(), p: rnd() * 6.283 }));
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    let v = 0;
+    for (const w of waves) v += (w.a * Math.sin(((w.kx * i + w.kz * j) / N) * 6.283 + w.p)) / Math.hypot(w.kx, w.kz);
+    h[j * N + i] = v;
+  }
+  const data = new Uint8Array(N * N * 4), at = (i, j) => h[((j + N) % N) * N + ((i + N) % N)];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const dx = (at(i + 1, j) - at(i - 1, j)) * 2, dz = (at(i, j + 1) - at(i, j - 1)) * 2, L = Math.hypot(dx, dz, 1), o = (j * N + i) * 4;
+    data[o] = ((-dx / L) * 0.5 + 0.5) * 255; data[o + 1] = ((-dz / L) * 0.5 + 0.5) * 255; data[o + 2] = ((1 / L) * 0.5 + 0.5) * 255; data[o + 3] = 255;
+  }
+  const tex = new pc.Texture(app.graphicsDevice, { width: N, height: N, format: pc.PIXELFORMAT_RGBA8, mipmaps: true, addressU: pc.ADDRESS_REPEAT, addressV: pc.ADDRESS_REPEAT, name: 'waves' });
+  tex.lock().set(data); tex.unlock();
+  return tex;
 }
