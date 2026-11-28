@@ -544,7 +544,7 @@ export function buildWorld(app) {
   // ---------- Bầu trời ----------
   const sun = new pc.Entity('sun');
   // Bóng đổ 3 tầng (cascade): sắc nét gần camera, vẫn phủ được cả bản đồ khi nhìn toàn cảnh
-  sun.addComponent('light', { type: 'directional', castShadows: true, shadowResolution: 2048, shadowDistance: 320, numCascades: 3, cascadeDistribution: 0.55, shadowType: pc.SHADOW_PCF3_32F, shadowBias: 0.25, normalOffsetBias: 0.04, intensity: 1.2 });
+  sun.addComponent('light', { type: 'directional', castShadows: true, shadowResolution: 2048, shadowDistance: 320, numCascades: 3, cascadeDistribution: 0.55, shadowType: pc.SHADOW_PCF3_32F, shadowBias: 0.35, normalOffsetBias: 0.25, intensity: 1.2 });
   world.addChild(sun);
   // Trời sao: 900 tam giác nhỏ trên vòm bán kính 800, chỉ hiện khi trời tối và quang
   const starMat = new pc.StandardMaterial();

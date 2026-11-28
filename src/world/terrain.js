@@ -1,44 +1,64 @@
-// Địa hình low-poly (đổ bóng phẳng, tô màu theo độ cao) và mặt nước sông.
+// Địa hình mịn liền mạch (lưới dùng chung đỉnh, pháp tuyến mượt theo độ dốc thật, màu chuyển dần) và mặt nước sông.
 import * as pc from 'playcanvas';
 import { height, MAP_HALF, WATER_Y, BORDER_X } from '../map.js';
 import { seeded } from '../rng.js';
 
-const STEPS = 112; // bản đồ 380 × 380: mỗi ô ~3,4 đơn vị như trước
+const STEPS = 190; // bản đồ 380 × 380: mỗi ô 2 đơn vị; 191² ≈ 36 nghìn đỉnh dùng chung (chỉ số 16 bit)
 
-function colorFor(y, slope) {
-  if (y < -1.4) return [176, 160, 120];                   // lòng sông cát
-  if (y > 16) return [236, 240, 240];                     // tuyết
-  if (y > 9 || slope > 0.7) return [128, 128, 118];       // đá
-  const t = Math.min(1, Math.max(0, (y + 1) / 9));
-  return [Math.round(96 - 20 * t), Math.round(140 - 25 * t), Math.round(82 - 10 * t)];
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+const SAND = [176, 160, 120], GRASS_LO = [98, 142, 82], GRASS_HI = [76, 115, 70], DRY = [128, 132, 92], ROCK = [124, 122, 114], SNOW = [236, 240, 242];
+
+/** Màu đất theo độ cao y, độ dốc (0 phẳng – 1 dựng đứng) và nhiễu nhỏ n (−1..1), chuyển dần giữa các vùng. */
+function colorFor(y, slope, n) {
+  let c = mix(GRASS_LO, GRASS_HI, smooth(-1, 8, y));
+  c = mix(c, DRY, smooth(5, 10, y + n * 1.5) * 0.6);          // cỏ khô trên cao
+  c = mix(c, ROCK, Math.max(smooth(8, 12, y + n), smooth(0.45, 0.75, slope + n * 0.05))); // đá: cao hoặc dốc
+  c = mix(c, SNOW, smooth(15, 19, y + n * 1.5));               // tuyết trên đỉnh
+  c = mix(c, SAND, smooth(-0.6, -1.6, y));                      // bãi cát / lòng sông
+  const k = 1 + n * 0.05;                                       // loang lổ nhẹ cho tự nhiên
+  return [c[0] * k, c[1] * k, c[2] * k];
 }
 
 export function buildTerrain(app, parent) {
-  const size = MAP_HALF * 2, step = size / STEPS;
-  const positions = [], normals = [], colors = [];
-  const P = (i, j) => { const x = -MAP_HALF + i * step, z = -MAP_HALF + j * step; return [x, height(x, z), z]; };
-  const a = new pc.Vec3(), b = new pc.Vec3(), n = new pc.Vec3();
-  const tri = (p0, p1, p2) => {
-    a.set(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]);
-    b.set(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]);
-    n.cross(a, b).normalize();
-    if (n.y < 0) n.mulScalar(-1);
-    const y = (p0[1] + p1[1] + p2[1]) / 3, c0 = colorFor(y, 1 - n.y);
-    // Đất nước láng giềng (bên kia biên giới) tô ngả vàng khô để dễ phân biệt
-    const c = (p0[0] + p1[0] + p2[0]) / 3 > BORDER_X ? [Math.min(255, c0[0] + 34), Math.min(255, c0[1] + 14), Math.max(0, c0[2] - 8)] : c0;
-    for (const p of [p0, p1, p2]) { positions.push(...p); normals.push(n.x, n.y, n.z); colors.push(...c, 255); }
-  };
-  for (let i = 0; i < STEPS; i++) {
-    for (let j = 0; j < STEPS; j++) {
-      const p00 = P(i, j), p10 = P(i + 1, j), p01 = P(i, j + 1), p11 = P(i + 1, j + 1);
-      tri(p00, p01, p10); tri(p10, p01, p11);
+  const size = MAP_HALF * 2, step = size / STEPS, V = STEPS + 1;
+  const positions = new Float32Array(V * V * 3), normals = new Float32Array(V * V * 3), colors = new Uint8ClampedArray(V * V * 4);
+  const rnd = seeded('terrain-tint'), ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
+  const noise = (x, z) => 0.5 * Math.sin(x * 0.13 + ph[0]) * Math.cos(z * 0.11 + ph[1]) + 0.5 * Math.sin((x + z) * 0.041 + ph[2]);
+  const H = 0.75; // bước sai phân trung tâm để tính pháp tuyến từ chính hàm độ cao (mượt, không phụ thuộc lưới)
+  for (let j = 0; j < V; j++) {
+    for (let i = 0; i < V; i++) {
+      const k = j * V + i, x = -MAP_HALF + i * step, z = -MAP_HALF + j * step, y = height(x, z);
+      positions[k * 3] = x; positions[k * 3 + 1] = y; positions[k * 3 + 2] = z;
+      const dx = (height(x + H, z) - height(x - H, z)) / (2 * H), dz = (height(x, z + H) - height(x, z - H)) / (2 * H);
+      const L = Math.hypot(dx, 1, dz), ny = 1 / L;
+      normals[k * 3] = -dx / L; normals[k * 3 + 1] = ny; normals[k * 3 + 2] = -dz / L;
+      let c = colorFor(y, 1 - ny, noise(x, z));
+      // Đất nước láng giềng ngả vàng khô, chuyển dần qua dải biên giới 8 đơn vị
+      const f = smooth(BORDER_X - 4, BORDER_X + 4, x);
+      if (f > 0) c = mix(c, [c[0] + 34, c[1] + 14, c[2] - 8], f);
+      colors[k * 4] = c[0]; colors[k * 4 + 1] = c[1]; colors[k * 4 + 2] = c[2]; colors[k * 4 + 3] = 255;
+    }
+  }
+  const indices = new Uint16Array(STEPS * STEPS * 6);
+  let o = 0;
+  for (let j = 0; j < STEPS; j++) {
+    for (let i = 0; i < STEPS; i++) {
+      const a = j * V + i, b = a + 1, c = a + V, d = c + 1;
+      // chia ô theo đường chéo ít gập hơn để sườn đồi không bị răng cưa
+      if (Math.abs(positions[a * 3 + 1] - positions[d * 3 + 1]) < Math.abs(positions[b * 3 + 1] - positions[c * 3 + 1])) {
+        indices.set([a, c, d, a, d, b], o);
+      } else {
+        indices.set([a, c, b, b, c, d], o);
+      }
+      o += 6;
     }
   }
   const mesh = new pc.Mesh(app.graphicsDevice);
   mesh.setPositions(positions);
   mesh.setNormals(normals);
   mesh.setColors32(colors);
-  mesh.setIndices([...Array(positions.length / 3).keys()]);
+  mesh.setIndices(indices);
   mesh.update();
 
   const mat = new pc.StandardMaterial();

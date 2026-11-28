@@ -24,7 +24,7 @@ export function height(x, z) {
   for (const [px, pz, r] of PADS) {
     const d = Math.hypot(x - px, z - pz);
     if (d < r * 1.8) {
-      const t = d < r ? 1 : 1 - (d - r) / (r * 0.8);
+      const u = d < r ? 0 : (d - r) / (r * 0.8), t = 1 - u * u * (3 - 2 * u); // chuyển mượt (không thành gờ khi địa hình đổ bóng mịn)
       y += (Math.max(0.6, baseHeight(px, pz)) - y) * t;
     }
   }

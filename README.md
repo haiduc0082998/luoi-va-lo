@@ -203,6 +203,10 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - Nhà cửa, vỉa hè, 360 vạch kẻ đường, ray metro trong thành phố.
   - Cột điện của từng tuyến, cụm nhà thành phố trên bản đồ, trạm biến áp, cửa khẩu, hàng rào biên giới.
   - Mỗi tuyến hay công trình một nhóm riêng, nên ẩn hay xoá một cái chỉ phải dựng lại nhóm của nó.
+- **Mặt đất mịn liền mạch** (trước là đa giác low-poly):
+  - Lưới 190 × 190 dùng chung đỉnh, pháp tuyến tính từ độ dốc thật nên ánh sáng chuyển mượt.
+  - Màu chuyển dần: cát → cỏ → cỏ khô → đá → tuyết, có loang lổ nhẹ; biên giới chuyển màu dần.
+  - Mép vùng san nền quanh công trình chuyển mượt, bóng đổ chỉnh để không bị sọc trên sườn đồi.
 - **Bảng chữ** (chỉ số, cửa sổ) cập nhật 10 lần/giây thay vì mỗi khung hình. Bấm nút thì vẽ lại ngay.
 - **Đồ hoạ tự thích nghi:**
   - Điện thoại mặc định đồ hoạ thấp; game nhớ lựa chọn của người chơi.
