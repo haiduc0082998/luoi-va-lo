@@ -86,6 +86,8 @@ def export_groups(groups, out, double=()):
     scene = trimesh.Scene()
     for name, (color, meshes) in groups.items():
         m = trimesh.util.concatenate(meshes)
+        if color is None:  # nhóm đã mang màu theo đỉnh
+            scene.add_geometry(m, node_name=name, geom_name=name); continue
         m.visual = trimesh.visual.TextureVisuals(material=PBRMaterial(baseColorFactor=list(color[:3]) + [255], metallicFactor=0.05, roughnessFactor=0.75, doubleSided=name in double))
         scene.add_geometry(m, node_name=name, geom_name=name)
     scene.export(out)
@@ -93,11 +95,12 @@ def export_groups(groups, out, double=()):
 
 
 def by_color(items):
-    g = {}
+    """Gộp mọi khối thành MỘT lưới 'Body' mang màu theo đỉnh: một lệnh vẽ thay vì một lệnh mỗi màu."""
+    body = []
     for _, m, c in items:
-        key = f'c{c[0]:02x}{c[1]:02x}{c[2]:02x}'
-        g.setdefault(key, (c, []))[1].append(m)
-    return g
+        m = m.copy(); m.visual = trimesh.visual.ColorVisuals(m, vertex_colors=np.tile(list(c[:3]) + [255], (len(m.vertices), 1)))
+        body.append(m)
+    return {'Body': (None, body)} if body else {}
 
 
 def thermal():

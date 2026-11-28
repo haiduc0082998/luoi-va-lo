@@ -164,19 +164,27 @@ class Model:
         g[3].append(mesh)
         return mesh
 
-    def export(self, filename, scale=1.0, yaw=0.0, center=True, ground=True, origin=None):
+    def export(self, filename, scale=1.0, yaw=0.0, center=True, ground=True, origin=None, keep=()):
         """Xoay Z-lên → Y-lên (x, y, z) → (x, z, −y), quay thêm `yaw` độ quanh Y để mặt trước nhìn −Z,
-        nhân tỉ lệ, rồi đặt gốc: giữa đáy (center/ground) hoặc tại điểm `origin` (toạ độ FreeCAD)."""
+        nhân tỉ lệ, rồi đặt gốc: giữa đáy (center/ground) hoặc tại điểm `origin` (toạ độ FreeCAD).
+        Để giảm lệnh vẽ, mọi nhóm gộp thành MỘT lưới 'Body' mang màu theo đỉnh (PlayCanvas tự dùng màu đỉnh),
+        trừ các nhóm trong `keep` (game cần tìm theo tên để đổi màu / bật tắt) giữ thành nút riêng."""
         T = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, -1, 0, 0], [0, 0, 0, 1]], float)
         T = trimesh.transformations.rotation_matrix(math.radians(yaw), (0, 1, 0)) @ T
         T = np.diag([scale, scale, scale, 1]) @ T
-        merged = {}
+        merged, body = {}, []
         for name, (color, metal, rough, meshes) in self.groups.items():
             m = trimesh.util.concatenate(meshes)
             m.apply_transform(T)
-            mat = PBRMaterial(baseColorFactor=[int(c * 255) for c in color] + [255], metallicFactor=metal, roughnessFactor=rough)
-            m.visual = trimesh.visual.TextureVisuals(material=mat)
-            merged[name] = m
+            if name in keep:
+                mat = PBRMaterial(baseColorFactor=[int(c * 255) for c in color] + [255], metallicFactor=metal, roughnessFactor=rough)
+                m.visual = trimesh.visual.TextureVisuals(material=mat)
+                merged[name] = m
+            else:
+                m.visual = trimesh.visual.ColorVisuals(m, vertex_colors=np.tile([int(c * 255) for c in color] + [255], (len(m.vertices), 1)))
+                body.append(m)
+        if body:
+            merged['Body'] = trimesh.util.concatenate(body)
         allv = np.vstack([m.vertices for m in merged.values()])
         lo, hi = allv.min(0), allv.max(0)
         if origin is not None:

@@ -39,11 +39,11 @@ def man():
     skin, shirt, pants, shoe = (0.78, 0.62, 0.48), (0.22, 0.34, 0.48), (0.18, 0.22, 0.28), (0.10, 0.12, 0.14)
     M.add('Head', ellipsoid((0, 0, 1660), (105, 95, 135)), skin)
     M.add('Neck', cylinder(58, 115, (0, 0, 1510)), skin)
-    M.add('Chest', ellipsoid((0, 0, 1370), (225, 125, 205)), shirt)
-    M.add('Abdomen', ellipsoid((0, 5, 1190), (165, 105, 190)), shirt)
+    M.add('Shirt', ellipsoid((0, 0, 1370), (225, 125, 205)), shirt)
+    M.add('Shirt', ellipsoid((0, 5, 1190), (165, 105, 190)), shirt)
     M.add('Pelvis', ellipsoid((0, 0, 1035), (190, 115, 115)), pants)
     for s in (-1, 1):
-        M.add('Shoulders', ellipsoid((s * 235, 0, 1450), (95, 100, 100)), shirt)
+        M.add('Shirt', ellipsoid((s * 235, 0, 1450), (95, 100, 100)), shirt)
         sh, el, wr, he = (s * 255, 0, 1435), (s * 350, 0, 1195), (s * 405, 0, 970), (s * 415, -8, 865)
         M.add('Arms', capsule(sh, el, 72, 58), skin)
         M.add('Arms', ellipsoid(el, (58, 58, 58)), skin)
@@ -57,7 +57,7 @@ def man():
         M.add('Legs', capsule(knee, ankle, 72, 48), pants)
         M.add('Legs', ellipsoid(ankle, (48, 52, 50)), pants)
         M.add('Feet', ellipsoid((s * 115, -75, 65), (72, 150, 58)), shoe)
-    M.export('man.glb', scale=0.001, yaw=180)  # mm → m; mặt nhìn −Y trong FreeCAD → −Z trong game
+    M.export('man.glb', scale=0.001, yaw=180, keep=('Shirt',))  # mm → m; mặt nhìn −Y trong FreeCAD → −Z trong game
 
 
 # ---------- Người nộm nữ (Female_Mannequin_CAD.FCMacro, mm) ----------
@@ -86,7 +86,7 @@ def woman():
         M.add('Arms', capsule((s * 305, 0, 1030), (s * 330, -5, 830), 34), skin)
         M.add('Arms', ellipsoid((s * 330, -5, 825), (31, 31, 32)), skin)
         M.add('Arms', ellipsoid((s * 335, -20, 755), (42, 30, 70)), skin)
-    M.export('woman.glb', scale=0.001, yaw=180)
+    M.export('woman.glb', scale=0.001, yaw=180, keep=('Top',))
 
 
 # ---------- Ô tô (Car_Model_FreeCAD.FCMacro, mét, đầu xe +X) ----------
@@ -96,14 +96,14 @@ def car():
     rings = []
     for x, hw, tz in [(-2.25, 0.62, 0.72), (-1.95, 0.82, 1.00), (-1.45, 0.91, 1.17), (1.35, 0.91, 1.17), (1.85, 0.80, 1.00), (2.15, 0.65, 0.78)]:
         rings.append([(x, -hw, 0.55), (x, hw, 0.55), (x, hw * 0.92, 0.83), (x, hw * 0.78, tz), (x, -hw * 0.78, tz), (x, -hw * 0.92, 0.83)])
-    M.add('CarBody', loft_rings(rings), paint, metal=0.4, rough=0.35)
+    M.add('Paint', loft_rings(rings), paint, metal=0.4, rough=0.35)
     dark = (0.22, 0.23, 0.25)
     M.add('Chassis', box(-2.05, -0.78, 0.48, 4.0, 1.56, 0.22), (0.16, 0.17, 0.19))
     M.add('Bumpers', box(1.92, -0.72, 0.53, 0.28, 1.44, 0.22), dark)
     M.add('Bumpers', box(-2.28, -0.72, 0.53, 0.25, 1.44, 0.22), dark)
     cab = [[(x, -w, zl), (x, w, zl), (x, w * 0.92, zh), (x, -w * 0.92, zh)]
            for x, w, zl, zh in [(-1.18, 0.66, 1.12, 1.17), (-0.72, 0.58, 1.30, 1.78), (0.25, 0.58, 1.30, 1.78), (0.92, 0.62, 1.12, 1.17)]]
-    M.add('Cabin', loft_rings(cab), (0.78, 0.10, 0.07), metal=0.4, rough=0.35)
+    M.add('Paint', loft_rings(cab), (0.78, 0.10, 0.07), metal=0.4, rough=0.35)
     glass = (0.10, 0.20, 0.27)
     M.add('Glass', face_extrude([(0.91, -0.55, 1.20), (0.62, -0.52, 1.68), (0.62, 0.52, 1.68), (0.91, 0.55, 1.20)], (0.015, 0, 0)), glass, 0.3, 0.15)
     M.add('Glass', face_extrude([(-1.12, -0.55, 1.20), (-0.75, -0.51, 1.68), (-0.75, 0.51, 1.68), (-1.12, 0.55, 1.20)], (-0.015, 0, 0)), glass, 0.3, 0.15)
@@ -122,13 +122,13 @@ def car():
         M.add('Headlights', box(2.02, s * 0.38 - 0.16, 0.78, 0.12, 0.28, 0.11), (0.92, 0.91, 0.72))
         M.add('Taillights', box(-2.18, s * 0.40 - 0.13, 0.78, 0.08, 0.24, 0.12), (0.85, 0.025, 0.02))
         M.add('Trim', box(0.55, s * 0.82 if s > 0 else -0.94, 1.14, 0.10, 0.12, 0.05), (0.20, 0.20, 0.22))
-        M.add('Mirrors', box(0.58, s * 0.91, 1.16, 0.18, 0.12, 0.10), paint)
+        M.add('Paint', box(0.58, s * 0.91, 1.16, 0.18, 0.12, 0.10), paint)
         M.add('Trim', box(-0.05, s * 0.91, 0.98, 0.20, 0.035, 0.035), (0.72, 0.72, 0.72), 0.8, 0.3)
     M.add('Trim', box(2.16, -0.30, 0.62, 0.025, 0.60, 0.18), (0.045, 0.05, 0.06))
     M.add('Plates', box(2.19, -0.18, 0.56, 0.025, 0.36, 0.08), (0.85, 0.86, 0.84))
     M.add('Plates', box(-2.31, -0.18, 0.56, 0.025, 0.36, 0.08), (0.85, 0.86, 0.84))
     # Bỏ tấm "Ground reference" của macro: game có mặt đường riêng.
-    M.export('car.glb', yaw=90)  # đầu xe +X → −Z
+    M.export('car.glb', yaw=90, keep=('Paint',))  # đầu xe +X → −Z
 
 
 # ---------- Nhà máy Chernobyl (hai macro low-poly) ----------
@@ -200,7 +200,7 @@ def chernobyl():
         M.add('Dark', box(-170, y, 0, 0.35, 14, 2.2), DARK)
         M.add('Dark', box(170, y, 0, 0.35, 14, 2.2), DARK)
     # Bỏ tấm "SiteGround": game có địa hình riêng. Gốc toạ độ đặt tại tâm khối lò số 4.
-    M.export('chernobyl.glb', origin=(29, 76, 0))
+    M.export('chernobyl.glb', origin=(29, 76, 0), keep=('Reactor4', 'Reactor4_Ruin'))
 
 
 def supercomplex():
@@ -303,7 +303,7 @@ def supercomplex():
     for i in range(5):
         roofed('Nearby_Buildings', -205 + i * 18, -75, 14, 12, 5)
         roofed('Nearby_Buildings', -205 + i * 18, -95, 14, 12, 5)
-    M.export('chernobyl-supercomplex.glb', origin=(28, 73, 0))
+    M.export('chernobyl-supercomplex.glb', origin=(28, 73, 0), keep=('Reactor4', 'Reactor4_Ruin'))
 
 
 ALL = {'tower': cooling_tower, 'man': man, 'woman': woman, 'car': car, 'chernobyl': chernobyl, 'supercomplex': supercomplex}

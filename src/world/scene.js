@@ -278,9 +278,9 @@ export function buildWorld(app) {
       g.setLocalPosition(n.x, y0, n.z);
       ent(g, 'box', [0, 0.2, 0], [12, 0.4, 14], M.concrete);
       for (const z of [-4, 4]) ent(g, 'box', [3, 1.6, z], [3, 3.2, 3], M.dark);
-      const arm = ent(g, 'box', [3, 1.4, 0], [0.3, 0.3, 7], M.flag);
+      const arm = ent(g, 'box', [3, 1.4, 0], [0.3, 0.3, 7], M.flag); arm.name = 'moving';
       ent(g, 'cylinder', [-4, 6, 5], [0.2, 12, 0.2], M.metal);
-      const flag = ent(g, 'box', [-4, 11, 6.3], [0.05, 1.6, 2.6], M.flag, false);
+      const flag = ent(g, 'box', [-4, 11, 6.3], [0.05, 1.6, 2.6], M.flag, false); flag.name = 'moving';
       const V = (x, y, z) => new pc.Vec3(n.x + x, y0 + y, n.z + z);
       for (const z of [-3.5, 3.5]) beam(g, V(-4, 0, z), V(-4, 7.4, z), 0.3, M.metal);
       beam(g, V(-4, 7.4, -3.5), V(-4, 7.4, 3.5), 0.3, M.metal);
@@ -303,9 +303,9 @@ export function buildWorld(app) {
       tex.setSource(canvas);
       const m = mat('#5f6872'); m.emissiveMap = tex; m.emissive = col('#ffc861'); m.update();
       // Nhà cửa dựng lại khi thành phố được nâng cấp: nhiều toà hơn, cao hơn
-      let bld = null, builtLv = 0, side = 1;
+      let bld = null, builtLv = 0, side = 1, bldBatch = -1;
       const makeBuildings = () => {
-        bld?.destroy(); bld = new pc.Entity(); g.addChild(bld); builtLv = n.lv ?? 1;
+        bld?.destroy(); if (bld) app.batcher.removeGroup(bldBatch); bld = new pc.Entity(); g.addChild(bld); builtLv = n.lv ?? 1;
         const r = seeded(n.id), count = Math.round(4 + n.demandBase / 60), hk = 1 + 0.3 * (builtLv - 1);
         side = Math.ceil(Math.sqrt(count));
         for (let i = 0; i < count; i++) {
@@ -313,6 +313,7 @@ export function buildWorld(app) {
           const x = ((i % side) - (side - 1) / 2) * 5.2 + (r() - 0.5), z = (Math.floor(i / side) - (side - 1) / 2) * 5.6 + (r() - 0.5);
           ent(bld, 'box', [x, h / 2, z], [3.8 + r(), h, 4 + r()], m);
         }
+        bldBatch = staticBatch(bld, `city-${n.id}-${builtLv}`); // cả cụm nhà: 1 lệnh vẽ
       };
       makeBuildings();
       const glow = light(g, [0, 8, 0], '#ffc861', 34);
@@ -419,8 +420,9 @@ export function buildWorld(app) {
       e: ent(g, 'sphere', [0, -50, 0], [pulseSize, pulseSize, pulseSize], M.pulse, false), u: i / nPulse,
     }));
     const PP = new pc.Vec3();
+    const batch = staticBatch(g, `line-${l.id}`, [wireEnt, fA.g, fB.g, ...pulses.map((p) => p.e)]); // cột + sứ: gộp tĩnh
     return {
-      g, polyline: tops, mid: at(0.5),
+      g, batch, polyline: tops, mid: at(0.5),
       update(t, selected, dt = 0) {
         const broken = l.state === 'fire', live = lineUsable(l);
         const sag = (0.5 + clamp((l.Tw - 40) * 0.03, 0, 4.5)) * (dist / spans / 14);
@@ -468,7 +470,18 @@ export function buildWorld(app) {
 
   // ---------- Đồng bộ với dữ liệu lưới ----------
   const nodeViews = new Map(), lineViews = new Map();
+  // Gộp tĩnh (BatchManager): các khối không bao giờ di chuyển của một công trình / một tuyến dây gộp thành vài lưới,
+  // mỗi vật liệu một lệnh vẽ. Mỗi công trình / tuyến một nhóm riêng, nên khi bị ẩn (ngoài khung nhìn) hay bị xoá
+  // thì chỉ nhóm của nó phải dựng lại. Phần chuyển động (xung điện, lửa, cần cẩu…) truyền vào `skip`.
+  function staticBatch(root, key, skip = []) {
+    const grp = app.batcher.addGroup(key, false, 400);
+    const out = new Set(skip.flatMap((e) => e.find(() => true)));
+    for (const r of root.findComponents('render')) if (!out.has(r.entity)) r.batchGroupId = grp.id;
+    return grp.id;
+  }
   // Bán kính bao của từng loại công trình (để kiểm tra có nằm trong khung nhìn không)
+  // Công trình gộp tĩnh được + các phần chuyển động cần giữ riêng (trả về danh sách thực thể)
+  const STATIC_NODES = { sub: (g) => g.children.filter((c) => c.name === 'fire'), border: (g) => g.children.filter((c) => c.name === 'moving') };
   const VIEW_R = { nuclear: 60, city: 34, coal: 30, hydro: 34, sub: 14, border: 18, wind: 22, mine: 26 };
   const cull = { shown: 0, hidden: 0 }, sph = new pc.BoundingSphere();
   const inView = (fr, x, y, z, r) => { sph.center.set(x, y, z); sph.radius = r; return fr.containsSphere(sph) > 0; };
@@ -486,14 +499,16 @@ export function buildWorld(app) {
   const strikeLight = light(world, [0, -50, 0], '#ffb070', 70);
   let strikeT = 0, seenStrikes = 0;
   function sync(G) {
-    for (const [id, v] of nodeViews) if (!G.net.nodes.some((n) => n.id === id)) { v.g.destroy(); v.guard?.destroy(); nodeViews.delete(id); }
+    for (const [id, v] of nodeViews) if (!G.net.nodes.some((n) => n.id === id)) { v.g.destroy(); v.guard?.destroy(); if (v.batch) app.batcher.removeGroup(v.batch); nodeViews.delete(id); }
     infra.sync(G);
     for (const n of G.net.nodes) {
       if (nodeViews.has(n.id)) continue;
       const g = new pc.Entity(`node-${n.id}`); world.addChild(g);
-      nodeViews.set(n.id, { g, update: builders[n.type](n, g), node: n, guard: n.type === 'border' ? null : makeGuard(n) });
+      const v = { g, update: builders[n.type](n, g), node: n, guard: n.type === 'border' ? null : makeGuard(n) };
+      if (STATIC_NODES[n.type]) v.batch = staticBatch(g, `node-${n.id}`, STATIC_NODES[n.type](g)); // công trình ít chuyển động: gộp tĩnh
+      nodeViews.set(n.id, v);
     }
-    for (const [id, v] of lineViews) if (!G.net.lines.some((l) => l.id === id)) { v.g.destroy(); lineViews.delete(id); }
+    for (const [id, v] of lineViews) if (!G.net.lines.some((l) => l.id === id)) { v.g.destroy(); app.batcher.removeGroup(v.batch); lineViews.delete(id); }
     for (const l of G.net.lines) {
       if (lineViews.has(l.id)) continue;
       const a = nodeById(G, l.a), b = nodeById(G, l.b);
@@ -557,7 +572,7 @@ export function buildWorld(app) {
   const NIGHT = col('#0b1420'), DAYW = new pc.Color(), FLASH = col('#e8eeff'), sky = new pc.Color();
   let time = 0;
 
-  function setQuality(high) { sun.light.castShadows = high; sun.light.numCascades = high ? 3 : 1; hiQuality = high; }
+  function setQuality(high) { sun.light.castShadows = high; sun.light.numCascades = high ? 3 : 1; hiQuality = high; cityView.setDensity(high ? 1 : 0.5); }
   // Bóng đổ: chỉ vẽ lại bản đồ bóng khi camera di chuyển, còn khi đứng yên thì 6 khung hình một lần
   // (đủ cho mặt trời di chuyển chậm và xe cộ nhỏ), tiết kiệm cả một lượt vẽ toàn cảnh mỗi khung hình.
   sun.light.shadowUpdateMode = pc.SHADOWUPDATE_THISFRAME;
@@ -652,6 +667,7 @@ export function buildWorld(app) {
       ent(fence, 'box', [BORDER_X, y + 1.7, z + 4.5], [0.12, 0.5, 9], M.army ?? M.metal, false);
     }
     for (let z = -MAP_HALF + 30; z < MAP_HALF; z += 60) { const y = groundY(BORDER_X, z); ent(fence, 'box', [BORDER_X, y + 2, z], [1.4, 4, 1.4], M.flag ?? M.metal); }
+    staticBatch(fence, 'border-fence');
   }
 
   return { update, setGhost, lineViews, setQuality, infraViews: infra.views, setMode, cityView, cull };

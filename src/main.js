@@ -26,7 +26,7 @@ const stage = document.getElementById('stage');
 
 let app;
 try {
-  app = new pc.Application(canvas, { graphicsDeviceOptions: { antialias: true } });
+  app = new pc.Application(canvas, { graphicsDeviceOptions: { antialias: false } }); // khử răng cưa do hậu kỳ (MSAA) đảm nhận
 } catch (err) {
   document.getElementById('noGL').hidden = false;
   throw err;
@@ -34,6 +34,7 @@ try {
 app.graphicsDevice.maxPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 app.setCanvasFillMode(pc.FILLMODE_NONE);
 app.setCanvasResolution(pc.RESOLUTION_AUTO);
+const COARSE = matchMedia('(pointer: coarse)').matches; // màn hình cảm ứng (điện thoại, máy tính bảng)
 const fit = () => app.resizeCanvas(stage.clientWidth, stage.clientHeight);
 // Chiều cao thanh chỉ số (đổi khi xoay máy / mở thêm chỉ số): các cửa sổ trượt bắt đầu ngay dưới nó
 const topBar = document.querySelector('.top');
@@ -150,10 +151,32 @@ hud = createHud(G, {
   onSelect: () => {},
   onQuality: (high) => {
     world.setQuality(high); post.setQuality(high);
-    app.graphicsDevice.maxPixelRatio = high ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    // Điện thoại màn hình mật độ cao: đồ hoạ cao cũng chỉ vẽ tối đa 1,5× để đỡ nóng máy
+    app.graphicsDevice.maxPixelRatio = high ? Math.min(window.devicePixelRatio || 1, COARSE ? 1.5 : 2) : 1;
     fit();
+    if (!autoSwitching) { try { localStorage.setItem('luoi-va-lo/quality', high ? 'high' : 'low'); } catch { /* riêng tư */ } manualQuality = true; }
   },
 });
+// ---------- Chất lượng đồ hoạ: điện thoại mặc định thấp, nhớ lựa chọn, tự giảm khi máy chạy chậm ----------
+let autoSwitching = false, manualQuality = false, slowFor = 0, frameEma = 1 / 60;
+const setQualityAuto = (high) => {
+  const btn = document.getElementById('quality');
+  if (hud.ui.quality !== high) { autoSwitching = true; btn.click(); autoSwitching = false; }
+};
+{
+  let saved = null; try { saved = localStorage.getItem('luoi-va-lo/quality'); } catch { /* riêng tư */ }
+  if (saved ? saved === 'low' : COARSE || Math.min(innerWidth, innerHeight) < 600) setQualityAuto(false);
+  if (saved) manualQuality = true;
+}
+function watchFrameRate(dt) {
+  frameEma += (dt - frameEma) * 0.05;
+  if (!hud.ui.quality || manualQuality || G.speed === 0) return;
+  slowFor = frameEma > 1 / 25 ? slowFor + dt : 0; // dưới ~25 khung hình/giây liên tục 4 giây
+  if (slowFor > 4) {
+    setQualityAuto(false); slowFor = 0;
+    Game.news(G, 'Máy đang chạy chậm nên đồ hoạ đã tự chuyển sang mức thấp (tắt SSAO, bóng nhiều tầng, bớt người và xe). Bật lại trong cửa sổ Bản đồ nếu muốn.', 'warn');
+  }
+}
 const s5 = createStage5(G);
 const audio = createAudio(G);
 const bar = createGameBar(G, audio, { loaded });
@@ -161,7 +184,9 @@ const drawers = createDrawers(G);
 const extras = createExtras(G, drawers);
 // Chọn một công trình / tuyến dây trên bản đồ thì mở cửa sổ Công trình bên cạnh
 const selectRaw = hud.select;
-hud.select = (s) => { selectRaw(s); if (s && !cityId) drawers.open('insp'); };
+hud.select = (s) => { selectRaw(s); uiAcc = 1; if (s && !cityId) drawers.open('insp'); };
+// Bấm nút / nhập liệu thì vẽ lại bảng ngay khung hình sau (không chờ nhịp 10 lần/giây)
+for (const ev of ['click', 'input', 'change']) document.addEventListener(ev, () => { uiAcc = 1; }, true);
 // Thanh chỉ số: trên màn hẹp chỉ hiện chỉ số chính, bấm "Thêm chỉ số" để mở hết
 document.getElementById('statMore').addEventListener('click', (e) => {
   const on = document.getElementById('stat').classList.toggle('expanded');
@@ -208,21 +233,32 @@ function updateTags() {
   }
 }
 
+// Đo thời gian từng phần mỗi khung hình (bật bằng ?prof trên địa chỉ trang, đọc qua window.__prof)
+let uiAcc = 1; // bộ đếm nhịp vẽ lại bảng chữ
+const PROF = new URLSearchParams(location.search).has('prof') ? (window.__prof = { frames: 0 }) : null;
+const tick = (name, f) => { if (!PROF) return f(); const t0 = performance.now(); f(); PROF[name] = (PROF[name] ?? 0) + performance.now() - t0; };
 app.on('update', (dt) => {
   const dtReal = Math.min(dt, 0.1);
-  Game.advance(G, dtReal);
+  if (PROF) PROF.frames++;
+  watchFrameRate(dt);
+  tick('sim', () => Game.advance(G, dtReal));
   camera.update(dtReal);
-  world.update(G, dtReal, camera.entity, hud.ui.selection, cityId);
+  tick('world', () => world.update(G, dtReal, camera.entity, hud.ui.selection, cityId));
   const hr = Game.hourOfDay(G), night = hr < 6 || hr > 19 ? 1 : hr < 7.5 ? (7.5 - hr) / 1.5 : hr > 17.5 ? (hr - 17.5) / 1.5 : 0;
   post.mood({ night, storm: !!WEATHERS[G.weather.id].grey, rad: Math.max(G.reactor.plume, G.reactor2?.plume ?? 0), dt: dtReal });
   if (cityId) cityPanel.render(cityId);
   world.setGhost(G, hud.ui.tool, cursor, lineFrom ? Game.nodeById(G, lineFrom) : null);
-  updateTags();
-  hud.render();
-  s5.render();
+  tick('tags', updateTags); // nhãn bám theo camera: mỗi khung hình
+  // Bảng chữ (chỉ số, cửa sổ) chỉ cần cập nhật ~10 lần/giây: mắt không đọc kịp nhanh hơn, đỡ tốn DOM
+  uiAcc += dt;
+  if (uiAcc >= 0.1) {
+    tick('hud', () => hud.render());
+    tick('s5', () => s5.render());
+    bar.update();
+    tick('extras', () => extras.render(uiAcc));
+    uiAcc = 0;
+  }
   audio.update();
-  bar.update();
-  extras.render(dtReal);
 });
 
 // ---------- Phím tắt ----------

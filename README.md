@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–10)
+## Có gì trong bản này (Giai đoạn 1–11)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -187,6 +187,29 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - Khối lò sụp thành đống đổ nát khi nổ.
   - Mái vòm che an toàn mới chỉ dựng lên (trên tổ máy 1) khi người chơi bấm "Thay lõi" để dọn dẹp.
   - Sửa xong thì lò số 4 trở lại, và vẫn là lò RBMK (trước đây lò sửa xong bị đổi thành VVER).
+
+**Giai đoạn 11: giảm giật**
+
+Đo bằng `?prof` trên địa chỉ trang (số liệu ở `window.__prof`):
+
+| | Trước | Sau |
+|---|---|---|
+| Thành phố, lệnh vẽ | 5 188 | 90–166 |
+| Toàn cảnh, lệnh vẽ | 1 115 | khoảng 550 |
+
+- **Mô hình gộp làm một khối mang màu theo đỉnh:** ô tô 17 khối còn 2, người còn 2, máy bay 737 từ 9 còn 1, nhà máy 13–16 còn 1 (cộng các phần cần bật tắt).
+- **Xe và người trong thành phố vẽ bằng GPU instancing:** thân xe của cả 80 chiếc chung một lệnh vẽ, sơn mỗi màu một lệnh; người đi bộ tương tự.
+- **Gộp tĩnh** (BatchManager) cho:
+  - Nhà cửa, vỉa hè, 360 vạch kẻ đường, ray metro trong thành phố.
+  - Cột điện của từng tuyến, cụm nhà thành phố trên bản đồ, trạm biến áp, cửa khẩu, hàng rào biên giới.
+  - Mỗi tuyến hay công trình một nhóm riêng, nên ẩn hay xoá một cái chỉ phải dựng lại nhóm của nó.
+- **Bảng chữ** (chỉ số, cửa sổ) cập nhật 10 lần/giây thay vì mỗi khung hình. Bấm nút thì vẽ lại ngay.
+- **Đồ hoạ tự thích nghi:**
+  - Điện thoại mặc định đồ hoạ thấp; game nhớ lựa chọn của người chơi.
+  - Máy chạy dưới khoảng 25 khung hình/giây liên tục 4 giây thì tự hạ đồ hoạ (có thông báo), trừ khi người chơi đã tự chọn.
+  - Đồ hoạ thấp chỉ hiện một nửa số xe và người.
+  - Màn hình mật độ cao trên điện thoại vẽ tối đa 1,5×.
+  - Tắt khử răng cưa ở cấp thiết bị, vì hậu kỳ đã tự khử răng cưa.
 
 ## Cấu trúc mã
 

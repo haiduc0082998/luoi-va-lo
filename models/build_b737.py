@@ -174,9 +174,14 @@ def build():
         win.append(m)
     parts['Cabin_Windows'] = colored(trimesh.util.concatenate(win), (0.04, 0.10, 0.16), metal=0.3, rough=0.2)
 
+    # Gộp mọi bộ phận thành MỘT lưới mang màu theo đỉnh (1 lệnh vẽ cho mỗi máy bay thay vì 9)
+    body = []
+    for mesh in parts.values():
+        c = mesh.visual.material.baseColorFactor
+        m = mesh.copy(); m.visual = trimesh.visual.ColorVisuals(m, vertex_colors=np.tile(list(c[:3]) + [255], (len(m.vertices), 1)))
+        body.append(m)
     scene = trimesh.Scene()
-    for name, mesh in parts.items():
-        scene.add_geometry(mesh, node_name=name, geom_name=name)
+    scene.add_geometry(trimesh.util.concatenate(body), node_name='Boeing737', geom_name='Boeing737')
     return scene, parts
 
 

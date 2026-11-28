@@ -3,7 +3,7 @@
 import * as pc from 'playcanvas';
 import { N, SERVICES } from '../city.js';
 import { clamp } from '../util.js';
-import { col, mat, ent, beam, setBeam, lamp, seeded, model } from './kit.js';
+import { col, mat, ent, beam, setBeam, lamp, seeded, model, modelParts, instanced } from './kit.js';
 
 export const ORIGIN = new pc.Vec3(1000, 0, 0);
 export const LOT = 14;
@@ -37,18 +37,25 @@ export function createCityView(app, M) {
   // Nền: mặt đường phủ toàn bộ, vỉa hè từng lô
   ent(root, 'box', [ORIGIN.x, -0.6, ORIGIN.z], [size + 60, 1, size + 60], K.grass, false);
   ent(root, 'box', [ORIGIN.x, -0.05, ORIGIN.z], [N * LOT + 6, 0.1, N * LOT + 6], K.asphalt, false);
+  // 81 ô vỉa hè + 360 vạch kẻ đường: gộp tĩnh thành vài lưới (trước đây mỗi khối một lệnh vẽ)
+  const ground = new pc.Entity('city-ground'); root.addChild(ground);
   const c = new pc.Vec3();
-  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { lotCenter(i, j, c); ent(root, 'box', [c.x, 0.12, c.z], [LOT - 3.6, 0.24, LOT - 3.6], K.walk, false); }
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) { lotCenter(i, j, c); ent(ground, 'box', [c.x, 0.12, c.z], [LOT - 3.6, 0.24, LOT - 3.6], K.walk, false); }
   for (let k = 0; k <= N; k++) {
     const o = (k - HALF - 0.5) * LOT;
     for (let s = -N / 2; s < N / 2; s += 0.5) {
-      ent(root, 'box', [ORIGIN.x + o, 0.02, ORIGIN.z + s * LOT + 3], [0.25, 0.04, 3], K.lane, false);
-      ent(root, 'box', [ORIGIN.x + s * LOT + 3, 0.02, ORIGIN.z + o], [3, 0.04, 0.25], K.lane, false);
+      ent(ground, 'box', [ORIGIN.x + o, 0.02, ORIGIN.z + s * LOT + 3], [0.25, 0.04, 3], K.lane, false);
+      ent(ground, 'box', [ORIGIN.x + s * LOT + 3, 0.02, ORIGIN.z + o], [3, 0.04, 0.25], K.lane, false);
     }
   }
+  { const gg = app.batcher.addGroup('city-ground', false, 60); for (const r of ground.findComponents('render')) r.batchGroupId = gg.id; }
 
   // ---------- Nội dung từng lô (dựng lại khi thành phố thay đổi) ----------
   let lotsRoot = null, metroRoot = null, trains = [];
+  // Nhà cửa, đường ray, trụ metro là vật tĩnh: gộp thành vài lưới lớn theo vùng 48 × 48 (BatchManager),
+  // hàng trăm khối hộp chỉ còn vài chục lệnh vẽ; mỗi vùng vẫn được loại khi ngoài khung nhìn.
+  const batch = app.batcher.addGroup('city-static', false, 48);
+  const batchAll = (root0) => { for (const r of root0.findComponents('render')) r.batchGroupId = batch.id; };
   const box = (p, s, m, sh = true) => ent(lotsRoot, 'box', p, s, m, sh);
   const BUILD = {
     res(x, z, l, r) {
@@ -117,6 +124,7 @@ export function createCityView(app, M) {
     metroRoot = new pc.Entity(); root.addChild(metroRoot);
     const r = seeded(`view-${C.id}`), p = new pc.Vec3();
     for (const l of C.lots) { lotCenter(l.i, l.j, p); BUILD[l.type](p.x, p.z, l, r); }
+    batchAll(lotsRoot);
     // Tuyến metro trên cao: dầm + trụ, mỗi tuyến hai đoàn tàu chạy đi về
     trains = [];
     for (const line of C.lines) {
@@ -129,6 +137,7 @@ export function createCityView(app, M) {
         beam(metroRoot, a.clone().add(new pc.Vec3(0, 0.45, 0)), b.clone().add(new pc.Vec3(0, 0.45, 0)), 1, lm, false).setLocalScale(0.5, 0.15, len);
         for (let s = 6; s < len - 3; s += 7) { const q = new pc.Vec3().lerp(a, b, s / len); ent(metroRoot, 'cylinder', [q.x, 3.6, q.z], [0.8, 7.2, 0.8], K.track); }
       }
+      batchAll(metroRoot); // ray + trụ (trước khi thêm tàu: tàu chạy nên không gộp)
       for (let t = 0; t < 2; t++) {
         const tr = new pc.Entity(); metroRoot.addChild(tr);
         for (let car = 0; car < 3; car++) ent(tr, 'box', [0, 1.3, (car - 1) * 3.4], [2, 1.8, 3.2], lm);
@@ -139,25 +148,56 @@ export function createCityView(app, M) {
 
   // ---------- Xe cộ & người đi bộ (bể đối tượng) ----------
   const streets = Array.from({ length: N + 1 }, (_, k) => (k - HALF - 0.5) * LOT);
-  // Đổi màu sơn từng chiếc / áo từng người trên mô hình dùng chung (thay vật liệu của vài bộ phận)
-  const paint = (names, m) => (e) => { for (const n of names) for (const mi of e.findByName(n)?.render?.meshInstances ?? []) mi.material = m; };
+  // Vẽ bằng GPU instancing: thân xe của cả 80 chiếc = 1 lệnh vẽ, sơn mỗi màu 1 lệnh, đèn pha 1 lệnh; người đi bộ tương tự.
+  // Mỗi xe / người chỉ còn là một thực thể giữ vị trí (không có render); mỗi khung hình gom ma trận rồi vẽ một lượt.
+  const crowd = new pc.Entity('crowd'); root.addChild(crowd);
+  const boxMesh = pc.Mesh.fromGeometry(app.graphicsDevice, new pc.BoxGeometry());
   const cars = Array.from({ length: 80 }, (_, i) => {
     const e = new pc.Entity(); root.addChild(e);
-    const tmp = new pc.Entity(); e.addChild(tmp);
-    ent(tmp, 'box', [0, 0.75, 0], [1.6, 0.9, 3.2], K.car[i % K.car.length]);
-    ent(tmp, 'box', [0, 1.35, -0.2], [1.4, 0.6, 1.7], K.car[(i + 2) % K.car.length]);
-    model(e, 'car', 0.72, 0, tmp, paint(['CarBody', 'Cabin', 'Mirrors'], K.car[i % K.car.length])); // ô tô từ macro FreeCAD (dài 4,5 m)
-    ent(e, 'box', [0, 0.43, -1.66], [0.95, 0.1, 0.05], K.hl, false); // đèn pha sáng về đêm
-    return { e, axis: i % 2, line: streets[i % (N + 1)], lane: i % 4 < 2 ? 1 : -1, u: (i * 37) % 130 - 65, v: 6 + (i % 5) };
+    return { e, c: i % K.car.length, axis: i % 2, line: streets[i % (N + 1)], lane: i % 4 < 2 ? 1 : -1, u: (i * 37) % 130 - 65, v: 6 + (i % 5) };
   });
   const people = Array.from({ length: 110 }, (_, i) => {
     const e = new pc.Entity(); root.addChild(e);
-    const tmp = ent(e, 'box', [0, 0.7, 0], [0.5, 1.4, 0.5], K.person[i % K.person.length], false);
-    const woman = i % 2 === 1;
-    model(e, woman ? 'woman' : 'man', woman ? 0.85 : 0.8, 0, tmp, paint(woman ? ['Top'] : ['Chest', 'Abdomen', 'Shoulders'], K.person[i % K.person.length]));
     const li = i % N, lj = Math.floor(i / N) % N;
-    return { e, li, lj, u: (i * 0.37) % 1, v: 0.03 + (i % 7) * 0.006, side: i % 4 };
+    return { e, woman: i % 2 === 1, c: i % K.person.length, li, lj, u: (i * 0.37) % 1, v: 0.03 + (i % 7) * 0.006, side: i % 4 };
   });
+  const TMP = new pc.Mat4(), TMP2 = new pc.Mat4();
+  const mk = (pos, scl) => new pc.Mat4().setTRS(new pc.Vec3(...pos), pc.Quat.IDENTITY, new pc.Vec3(...scl));
+  // Bộ vẽ: trước khi mô hình tải xong dùng khối hộp màu (sets[k].local = biến đổi trong không gian của một cá thể)
+  const set = (mesh, material, local, max = 120) => ({ ...instanced(app, crowd, mesh, material, max), local });
+  const carSets = { body: K.car.map((m) => set(boxMesh, m, mk([0, 0.75, 0], [1.6, 0.9, 3.2]))), paint: [], hl: set(boxMesh, K.hl, mk([0, 0.43, -1.66], [0.95, 0.1, 0.05])) };
+  carSets.hl.mi.castShadow = false;
+  modelParts('car', (parts) => { // ô tô từ macro FreeCAD (dài 4,5 m), tỉ lệ 0,72
+    const S = mk([0, 0, 0], [0.72, 0.72, 0.72]), body = parts.find((p) => p.name === 'Body'), pt = parts.find((p) => p.name === 'Paint');
+    carSets.body.forEach((st) => st.e.destroy());
+    const bodySet = set(body.mesh, body.material, new pc.Mat4().mul2(S, body.local));
+    carSets.body = K.car.map(() => null); carSets.body[0] = bodySet; carSets.sharedBody = bodySet;
+    carSets.paint = K.car.map((m) => set(pt.mesh, m, new pc.Mat4().mul2(S, pt.local)));
+  });
+  const pplSets = { man: { body: null, top: [] }, woman: { body: null, top: [] }, box: K.person.map((m) => set(boxMesh, m, mk([0, 0.7, 0], [0.5, 1.4, 0.5]))) };
+  pplSets.box.forEach((st) => (st.mi.castShadow = false));
+  for (const [g, name, sc, top] of [['man', 'man', 0.8, 'Shirt'], ['woman', 'woman', 0.85, 'Top']]) {
+    modelParts(name, (parts) => {
+      const S = mk([0, 0, 0], [sc, sc, sc]), body = parts.find((p) => p.name === 'Body'), t = parts.find((p) => p.name === top);
+      pplSets[g].body = set(body.mesh, body.material, new pc.Mat4().mul2(S, body.local));
+      pplSets[g].top = K.person.map((m) => set(t.mesh, m, new pc.Mat4().mul2(S, t.local)));
+    });
+  }
+  function drawCrowd() {
+    const push = (st, W) => st && st.push(TMP2.mul2(W, st.local));
+    for (const c of cars) {
+      if (!c.e.enabled) continue;
+      const W = TMP.copy(c.e.getWorldTransform());
+      if (carSets.sharedBody) { push(carSets.sharedBody, W); push(carSets.paint[c.c], W); } else push(carSets.body[c.c], W);
+      push(carSets.hl, W);
+    }
+    for (const w of people) {
+      if (!w.e.enabled) continue;
+      const W = TMP.copy(w.e.getWorldTransform()), g = pplSets[w.woman ? 'woman' : 'man'];
+      if (g.body) { push(g.body, W); push(g.top[w.c], W); } else push(pplSets.box[w.c], W);
+    }
+    for (const st of [...carSets.body, carSets.sharedBody, ...carSets.paint, carSets.hl, ...pplSets.box, pplSets.man.body, ...pplSets.man.top, pplSets.woman.body, ...pplSets.woman.top]) st?.commit();
+  }
   // Máy bay bay ngang thành phố
   const planes = [0, 1].map((k) => {
     const p = new pc.Entity(); root.addChild(p);
@@ -182,7 +222,7 @@ export function createCityView(app, M) {
     K.tower.emissiveIntensity = lit * (0.3 + 1.6 * (1 - day)); K.tower.update();
     K.hl.emissiveIntensity = (1 - day) * 2.5; K.hl.update();
     // Xe: số lượng và tốc độ theo tắc đường
-    const active = Math.min(cars.length, C.cars), slow = 1 / (1 + 1.6 * C.congestion);
+    const active = Math.min(Math.round(cars.length * density), C.cars), slow = 1 / (1 + 1.6 * C.congestion);
     cars.forEach((c, i) => {
       c.e.enabled = i < active;
       if (!c.e.enabled) return;
@@ -195,6 +235,7 @@ export function createCityView(app, M) {
     });
     // Người đi bộ vòng quanh vỉa hè của lô
     for (const w of people) {
+      if (!w.e.enabled) continue;
       w.u = (w.u + w.v * dt) % 1;
       lotCenter(w.li, w.lj, P);
       const e = (LOT - 4.6) / 2, t = w.u * 4, s = Math.floor(t), f = t - s;
@@ -202,6 +243,7 @@ export function createCityView(app, M) {
       w.e.setPosition(P.x + a[0] + (b[0] - a[0]) * f, Math.abs(Math.sin(G.t * 3 + w.u * 50)) * 0.06, P.z + a[1] + (b[1] - a[1]) * f);
       w.e.setEulerAngles(0, (Math.atan2(-(b[0] - a[0]), -(b[1] - a[1])) * 180) / Math.PI, 0); // mặt nhìn theo hướng đi
     }
+    drawCrowd();
     // Tàu metro
     for (const t of trains) {
       const segs = t.pts.length - 1;
@@ -230,5 +272,11 @@ export function createCityView(app, M) {
     ghost.setPosition(P.x, 0.5, P.z);
   }
   void setBeam; void SERVICES;
-  return { root, update, setGhost, show: (on) => (root.enabled = on) };
+  let density = 1;
+  /** Mật độ xe và người đi bộ (1 = đủ, 0,5 = một nửa ở đồ hoạ thấp). */
+  function setDensity(k) {
+    density = k;
+    people.forEach((w, i) => (w.e.enabled = i < people.length * k));
+  }
+  return { root, update, setGhost, setDensity, show: (on) => (root.enabled = on) };
 }

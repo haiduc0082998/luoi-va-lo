@@ -53,7 +53,7 @@ export function beam(parent, a, b, t, m, shadow = true) {
 
 /** Ngọn lửa: vài hình nón phát sáng + đèn điểm, nhấp nháy. */
 export function fire(parent, p, size, M) {
-  const g = new pc.Entity(); g.setLocalPosition(p[0], p[1], p[2]); parent.addChild(g);
+  const g = new pc.Entity('fire'); g.setLocalPosition(p[0], p[1], p[2]); parent.addChild(g);
   const parts = [[0, 0, 1.4, M.flameA], [0.6, 0.3, 0.9, M.flameB], [-0.5, -0.4, 1.0, M.flameA]].map(([dx, dz, s, m]) => ({
     e: ent(g, 'cone', [dx * size, s * size, dz * size], [s * size, s * 2 * size, s * size], m, false), s: s * size,
   }));
@@ -134,7 +134,7 @@ export function loadModel(app, name, url) {
   app.assets.loadFromUrl(url, 'container', (err, asset) => {
     if (err) { console.warn('Không tải được mô hình', url, err); return; }
     models[name] = asset;
-    for (const w of waiting.filter((x) => x.name === name)) attach(w);
+    for (const w of waiting.filter((x) => x.name === name)) (w.run ? w.run() : attach(w));
   });
 }
 function attach(w) {
@@ -150,4 +150,35 @@ export function model(holder, name, scale = 1, yaw = 0, fallback = null, onReady
   const w = { holder, name, scale, yaw, fallback, onReady };
   if (models[name]) attach(w); else waiting.push(w);
   return holder;
+}
+
+// ---------- Vẽ đông (GPU instancing): hàng trăm vật giống nhau chỉ một lệnh vẽ cho mỗi bộ phận ----------
+/** Gọi cb([{ name, mesh, material, local }]) khi mô hình `name` đã tải (các lưới của nó, kèm biến đổi nút). */
+export function modelParts(name, cb) {
+  const run = () => {
+    const e = models[name].resource.instantiateRenderEntity({});
+    const root = e.getWorldTransform().clone().invert(), out = [];
+    for (const r of e.findComponents('render')) for (const mi of r.meshInstances) {
+      out.push({ name: r.entity.name, mesh: mi.mesh, material: mi.material, local: new pc.Mat4().mul2(root, r.entity.getWorldTransform()) });
+    }
+    e.destroy(); cb(out);
+  };
+  if (models[name]) run(); else waiting.push({ name, run });
+}
+
+/** Một bộ vẽ đông: mỗi khung hình push() ma trận từng cá thể rồi commit(). */
+export function instanced(app, parent, mesh, material, max, castShadows = true) {
+  const e = new pc.Entity('instanced'); parent.addChild(e);
+  const mi = new pc.MeshInstance(mesh, material);
+  e.addComponent('render', { meshInstances: [mi], castShadows, receiveShadows: true });
+  const data = new Float32Array(max * 16);
+  const vb = new pc.VertexBuffer(app.graphicsDevice, pc.VertexFormat.getDefaultInstancingFormat(app.graphicsDevice), max, { data, usage: pc.BUFFER_DYNAMIC });
+  mi.setInstancing(vb); mi.cull = false; // hộp bao là của một cá thể, không dùng để loại
+  let n = 0;
+  return {
+    e, mi,
+    push(m) { if (n < max) data.set(m.data, n++ * 16); },
+    commit() { vb.setData(data); mi.instancingCount = n; e.enabled = n > 0; n = 0; },
+    setMesh(m, mat) { mi.mesh = m; if (mat) mi.material = mat; },
+  };
 }
