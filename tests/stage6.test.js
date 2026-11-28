@@ -5,7 +5,7 @@ import { setWeather, windFarmMW } from '../src/weather.js';
 import { build, sell, canPlace, exportRE, upgradeMine } from '../src/infra.js';
 
 const runHours = (G, h) => { G.speed = 60; for (let i = 0; i < h * 60 && !G.over; i++) advance(G, 1); };
-const calm = (G, id = 'sunny') => { setWeather(G, id); G.weather.until = 1e12; };
+const calm = (G, id = 'sunny') => { setWeather(G, id); G.weather.until = 1e12; G.weather.seed = 0; }; // pha gió cố định để kết quả ổn định
 
 test('công suất gió theo lập phương, ngắt khi bão quá mạnh', () => {
   assert.equal(windFarmMW(2), 0);
