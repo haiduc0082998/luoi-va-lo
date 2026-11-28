@@ -228,6 +228,20 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - **Ngân sách trung ương cấp hằng ngày** khoảng 0,75–1,5 triệu USD, nhiều hơn khi được lòng dân. Rê chuột lên ô Ngân sách để xem thu chi mỗi ngày.
   - Ma tuý, khủng bố, tuyên truyền tăng chậm hơn 25%; cảnh sát và đài truyền hình vẫn đẩy lùi với tốc độ cũ.
 
+**Giai đoạn 13: điện mặt trời và trạm pin lưu trữ**
+- **Trại điện mặt trời 100 MW** (5,8 triệu USD + 4 t đất hiếm):
+  - Phát theo góc mặt trời: đỉnh buổi trưa, bằng 0 về đêm.
+  - Mây che làm giảm tới 75%; tấm pin nóng thì giảm 0,4%/°C.
+  - Hình 3D: 6 hàng tấm pin nghiêng 25° về phía nam, có tủ biến tần.
+- **Trạm pin lưu trữ 200 MW / 400 MWh** (9,2 triệu USD + 12 t đất hiếm):
+  - Chỉ sạc bằng điện "phải phát" còn dư (mặt trời, gió, hạt nhân), không sạc bằng nước hồ thuỷ điện. Hiệu suất khứ hồi khoảng 90%.
+  - Xả khi thuỷ điện đã hết sức, trước nhiệt điện than, nên cao điểm tối 19–20 h đỡ phải đốt than.
+  - Hình 3D: 4 container có quạt tản nhiệt. Vạch đèn trên trạm cho biết mức pin: xanh là đang sạc hoặc chờ, cam là đang xả.
+- Cả hai đều nâng cấp được, cần nhân công, có bảng thông tin riêng (mức pin, sạc/xả MW, nắng lúc này) và nhãn trên bản đồ.
+- **Nhiệm vụ mới "Nắng trưa, đèn tối":** xây 2 trại mặt trời và 1 trạm pin nối lưới, thưởng 6 triệu USD và 20 RP.
+- Cố vấn nhắc xây pin khi cao điểm tối phải chạy nhiều than, và nhắc khi trại hoặc trạm pin chưa nối dây.
+- Xây công trình mới sẽ chặt cây trong khuôn viên, không còn cây mọc xuyên qua nhà.
+
 ## Cấu trúc mã
 
 ```

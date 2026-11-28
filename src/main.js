@@ -226,7 +226,7 @@ function updateTags() {
     el.style.display = visible ? '' : 'none';
     if (!visible) continue;
     el.style.transform = `translate(${screen.x}px, ${screen.y}px) translate(-50%, -100%)`;
-    const status = n.state === 'fire' ? ' · CHÁY' : n.type === 'hydro' || n.type === 'wind' ? ` · ${fmt(n.gen)} MW` : n.type === 'mine' ? ` · ${fmt(G.res.U, 1)} t U` : n.type === 'border' ? (G.market.exportOn ? ` · xuất ${fmt(n.served)} MW` : '') : n.type === 'city' ? ` · ${fmt(n.served)}/${fmt(n.demand)} MW` : n.type === 'nuclear' ? ` · ${fmt(G.reactor.Pe / 1e6)} MW` : n.type === 'coal' ? ` · ${fmt(n.gen)} MW` : '';
+    const status = n.state === 'fire' ? ' · CHÁY' : n.type === 'hydro' || n.type === 'wind' || n.type === 'solar' ? ` · ${fmt(n.gen)} MW` : n.type === 'battery' ? ` · ${fmt((n.soc ?? 0.5) * 100)}%${n.gen > 0.5 ? ` xả ${fmt(n.gen)} MW` : n.charge > 0.5 ? ` sạc ${fmt(n.charge)} MW` : ''}` : n.type === 'mine' ? ` · ${fmt(G.res.U, 1)} t U` : n.type === 'border' ? (G.market.exportOn ? ` · xuất ${fmt(n.served)} MW` : '') : n.type === 'city' ? ` · ${fmt(n.served)}/${fmt(n.demand)} MW` : n.type === 'nuclear' ? ` · ${fmt(G.reactor.Pe / 1e6)} MW` : n.type === 'coal' ? ` · ${fmt(n.gen)} MW` : '';
     const text = n.name + status;
     if (el.textContent !== text) el.textContent = text;
     el.classList.toggle('alert', n.state === 'fire' || (n.type === 'city' && n.frac < 0.99) || (n.type === 'nuclear' && (G.reactor.scram || G.reactor.boom)));
@@ -286,4 +286,4 @@ setTool('select');
 app.start();
 window.__game = G; window.__world = world; // để kiểm thử và gỡ lỗi
 window.__enterCity = enterCity;
-window.__build = (type, x, z) => Infra.build(G, type, x, z);
+window.__build = (type, x, z) => Infra.build(G, type, x, z); window.__cam = camera;

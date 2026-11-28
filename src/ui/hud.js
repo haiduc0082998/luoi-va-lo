@@ -6,7 +6,8 @@ import { lineUsable, WIRE_FIRE_T, TX_FIRE_T, RHO_AL } from '../physics/network.j
 import { RATED, C_CORE, FLOW_NOM, outletTemp, T_IN, mwDisplay, dieselRunning, busPower, gridFeeds } from '../physics/reactor.js';
 import * as World from '../world.js';
 import * as Infra from '../infra.js';
-import { current as weatherNow, cycleWeather } from '../weather.js';
+import { current as weatherNow, cycleWeather, SOLAR_MW } from '../weather.js';
+import { BATTERY } from '../physics/network.js';
 import { UPGRADES, canUpgrade, upgradeCost, upgradeChance, upgrade, level } from '../upgrade.js';
 import { restartState, beginStartup, REPAIR } from '../startup.js';
 
@@ -15,7 +16,7 @@ const set = (id, v) => { const e = $(id); if (e && e.textContent !== v) e.textCo
 const kvText = (v) => `${fmt(v, v === 10.5 ? 1 : 0)} kV`;
 const money = (v) => `${fmt(v, 1)} tr USD`;
 const STATE_TEXT = { ok: 'Đang vận hành', tripped: 'Rơ-le đã cắt', collapse: 'Cắt do sụp đổ điện áp', fire: 'Cháy, đứt dây' };
-const TYPE_TEXT = { nuclear: 'Nhà máy hạt nhân', coal: 'Nhà máy nhiệt điện than', sub: 'Trạm biến áp', city: 'Thành phố', hydro: 'Nhà máy thủy điện', border: 'Đường dây liên kết quốc tế' };
+const TYPE_TEXT = { nuclear: 'Nhà máy hạt nhân', coal: 'Nhà máy nhiệt điện than', sub: 'Trạm biến áp', city: 'Thành phố', hydro: 'Nhà máy thủy điện', border: 'Đường dây liên kết quốc tế', wind: 'Trại điện gió', solar: 'Trại điện mặt trời', battery: 'Trạm pin lưu trữ', mine: 'Mỏ' };
 
 const REACTOR_LAMPS = [
   ['SCRAM', (R) => R.scram, 'warn'], ['Mất lưới ngoài', (R) => !R.offsite, 'warn'],
@@ -46,7 +47,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   seg('speed', [1, 50, 300, 1500, 0], (v) => (v ? `${v}×` : 'Dừng'), () => G.speed, (v) => (G.speed = v));
   seg('tools', ['select', 'build', 'line', 'sell'], (v) => ({ select: 'Chọn', build: 'Xây dựng ▾', line: 'Kéo dây', sell: 'Bán' }[v]), () => (ui.tool.startsWith('build') ? 'build' : ui.tool),
     (v) => { if (v === 'build') { $('buildMenu').hidden = !$('buildMenu').hidden; return; } $('buildMenu').hidden = true; ui.tool = v; onTool(v); });
-  $('buildMenu').innerHTML = `<p class="lab">Năng lượng & đô thị</p>${['sub', 'wind', 'tower', 'city'].map((k) => `<button class="bitem" type="button" data-b="${k}"><b>${Infra.BUILDS[k].name}</b><small>${Infra.BUILDS[k].desc}</small><span data-cost="${k}"></span></button>`).join('')}
+  $('buildMenu').innerHTML = `<p class="lab">Năng lượng & đô thị</p>${['sub', 'wind', 'solar', 'battery', 'tower', 'city'].map((k) => `<button class="bitem" type="button" data-b="${k}"><b>${Infra.BUILDS[k].name}</b><small>${Infra.BUILDS[k].desc}</small><span data-cost="${k}"></span></button>`).join('')}
     <p class="lab">Giao thông</p>${['road', 'port', 'airport'].map((k) => `<button class="bitem" type="button" data-b="${k}"><b>${Infra.BUILDS[k].name}</b><small>${Infra.BUILDS[k].desc}</small><span data-cost="${k}"></span></button>`).join('')}`;
   $('buildMenu').addEventListener('click', (e) => { const b = e.target.closest('[data-b]'); if (!b) return; ui.tool = `build:${b.dataset.b}`; $('buildMenu').hidden = true; onTool(ui.tool); });
   $('weatherBtn').addEventListener('click', () => cycleWeather(G));
@@ -106,7 +107,9 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     const head = `<h2>${esc(n.name)}</h2><p class="tag2">${TYPE_TEXT[n.type]} · máy biến áp ${fmt(n.rated)} MVA</p>${n.type === 'border' ? '' : '<div class="btns"><button class="btn" data-act="guard" type="button"></button></div>'}${up}`;
     const tx = row('Nhiệt độ dầu máy biến áp', 'cháy ở 150 °C', 'nT', bar('nTb', [93.7]));
     const repair = `<div class="btns"><button class="btn" data-act="repairNode" type="button" ${n.state === 'fire' ? '' : 'hidden'}>Thay máy biến áp (${money(Game.NODE_REPAIR * G.priceLevel)})</button>${n.sellable ? `<button class="btn danger" data-act="sellNode" type="button">Bán (thu hồi ${money(0.7 * n.cost)})</button>` : ''}</div>`;
-    if (n.type === 'wind') return `${head}<dl>${row('Đang phát', 'theo lập phương tốc độ gió, định mức 12 m/s', 'wG')}${row('Gió lúc này', 'ngắt bảo vệ khi trên 25 m/s', 'wW')}${tx}</dl>${repair}`;
+    if (n.type === 'wind') return `${head}<dl>${row('Đang phát', 'theo lập phương tốc độ gió, định mức 12 m/s', 'wG')}${row('Gió lúc này', n.offshore ? 'ngoài khơi: gió mạnh hơn ~12 %, tuabin lớn hơn' : 'ngắt bảo vệ khi trên 25 m/s', 'wW')}${tx}</dl>${repair}`;
+    if (n.type === 'solar') return `${head}<dl>${row('Đang phát', 'đỉnh buổi trưa, 0 về đêm', 'pG')}${row('Nắng lúc này', 'mây che giảm tới 75 %; tấm pin nóng thì giảm 0,4 %/°C', 'pS')}${tx}</dl>${repair}`;
+    if (n.type === 'battery') return `${head}<dl>${row('Mức pin', 'năng lượng còn trong pin', 'bE')}${row('Đang', 'sạc bằng điện rẻ còn dư, xả trước nhiệt điện than', 'bM')}${row('Giới hạn', 'công suất sạc/xả và dung lượng', 'bL')}${tx}</dl><div class="meter wide"><i id="bBar"></i></div><p class="note">Pin tự sạc khi có điện mặt trời, gió, hạt nhân, thuỷ điện còn dư (thường buổi trưa và đêm khuya) và tự xả khi thiếu, nhất là cao điểm tối 19–20 h, để khỏi chạy than đắt. Hiệu suất khứ hồi ~90 %.</p>${repair}`;
     if (n.type === 'mine') return `${head}<dl>${row('Điện cấp cho mỏ', 'mất điện thì ngừng khai thác', 'mP')}${row('Uranium trong kho', '', 'mU')}${row('Đất hiếm trong kho', '', 'mR')}${tx}</dl>${repair}`;
     if (n.type === 'city') return `${head}<div class="btns"><button class="btn primary" data-act="enterCity" type="button">Vào thành phố</button></div><p class="note">Bên trong: xây trường, bệnh viện, công viên, cảnh sát, cứu hoả, vẽ metro để tăng hạnh phúc và lòng dân.</p><dl>${row('Hạnh phúc', 'theo dịch vụ, điện, tắc đường', 'cHap')}${row('Nhu cầu lúc này', 'theo giờ trong ngày và nhiệt độ', 'cD')}${row('Được cấp', '', 'cS')}${row('Tần số tại chỗ', '', 'cH')}${tx}</dl>${repair}`;
     if (n.type === 'hydro') return `${head}<dl>${row('Đang phát', 'chạy sau hạt nhân, trước nhiệt điện; không tốn nhiên liệu', 'hG')}${row('Công suất tối đa', '', 'hM')}${tx}</dl>${repair}`;
@@ -239,6 +242,15 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
       set('cH', n.frac > 0 ? `${fmt(n.hz, 2)} Hz` : 'mất điện');
     } else if (n.type === 'wind') {
       set('wG', `${fmt(n.gen)} / ${fmt(n.cap)} MW`); set('wW', `${fmt(G.windNow ?? 0, 1)} m/s`);
+    } else if (n.type === 'solar') {
+      set('pG', `${fmt(n.gen)} / ${fmt(n.cap)} MW`);
+      set('pS', n.cap > 0.5 ? `${fmt((n.cap / Math.max(1, SOLAR_MW * (1 + 0.2 * ((n.lv ?? 1) - 1)))) * 100)}% định mức · ${weatherNow(G).name.toLowerCase()}` : 'trời tối, không phát');
+    } else if (n.type === 'battery') {
+      const k = n.lvK ?? 1;
+      set('bE', `${fmt((n.soc ?? 0.5) * 100)}% · ${fmt(n.E ?? 0)} / ${fmt(BATTERY.E * k)} MWh`);
+      set('bM', n.gen > 0.5 ? `xả ${fmt(n.gen)} MW` : n.charge > 0.5 ? `sạc ${fmt(n.charge)} MW` : 'chờ');
+      set('bL', `${fmt(BATTERY.P * k)} MW · ${fmt(BATTERY.E * k)} MWh`);
+      const bb = $('bBar'); if (bb) { bb.style.width = `${(n.soc ?? 0.5) * 100}%`; bb.style.background = n.gen > 0.5 ? 'var(--amber)' : 'var(--cool)'; }
     } else if (n.type === 'mine') {
       set('mP', n.frac > 0 ? `${fmt(n.served)} MW (${fmt(n.frac * 100)}%)` : 'mất điện'); set('mU', `${fmt(G.res.U, 1)} tấn`); set('mR', `${fmt(G.res.RE, 1)} tấn`);
     } else if (n.type === 'hydro') {

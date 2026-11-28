@@ -19,11 +19,13 @@ export const defaultImax = (A) => Math.round((A * 3.5) / 50) * 50;
 export const RATED_MVA = { sub: 800, city: 900, nuclear: 1200, coal: 800, hydro: 400, border: 700, wind: 200, mine: 150, solar: 160, battery: 260 };
 // Điều độ: gió (không kiểm soát được, nhận hết) → hạt nhân chạy nền → thủy điện rẻ → than đắt nhất
 // Thứ tự huy động: nguồn không tốn nhiên liệu trước, pin xả trước nhiệt điện than (đắt nhất)
+// Pin là nguồn đỉnh: chỉ xả khi thuỷ điện đã hết sức, để để dành cho cao điểm tối thay vì đốt than
 export const GEN_ORDER = ['solar', 'wind', 'nuclear', 'hydro', 'battery', 'coal'];
 /** Trạm pin lưu trữ: công suất 200 MW, dung lượng 400 MWh (2 giờ), hiệu suất mỗi chiều 95 % (khứ hồi ~90 %). */
 export const BATTERY = { P: 200, E: 400, eta: 0.95 };
 /** Nguồn rẻ được dùng để sạc pin (không sạc bằng than). */
-const CHARGE_FROM = ['solar', 'wind', 'nuclear', 'hydro'];
+// Chỉ sạc bằng nguồn "phải phát" còn dư; sạc bằng nước trong hồ thủy điện chỉ phí ~10 % hiệu suất
+const CHARGE_FROM = ['solar', 'wind', 'nuclear'];
 export const isLoad = (n) => n.type === 'city' || n.type === 'border' || n.type === 'mine';
 
 let nextId = 1;
@@ -155,7 +157,7 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
       n.island = k; n.hz = hz;
       if (isLoad(n)) { n.frac = f; n.served = n.demand * f; }
     }
-    // Pin: nếu không phải xả thì sạc bằng phần công suất rẻ còn dư (mặt trời, gió, hạt nhân, thuỷ điện)
+    // Pin: nếu không phải xả thì sạc bằng phần công suất rẻ còn dư (mặt trời, gió, hạt nhân)
     for (const b of isl.nodes) {
       if (b.type !== 'battery' || b.state !== 'ok' || b.gen > 0) continue;
       const k = b.lvK ?? 1, room = ((BATTERY.E * k - b.E) * 3600) / Math.max(dt, 1e-3) / BATTERY.eta;

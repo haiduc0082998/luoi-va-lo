@@ -14,8 +14,8 @@ import { WEATHERS } from '../weather.js';
 import { col, col255, mat, ent, light, setBeam, beam, fire, seeded, lamp, model } from './kit.js';
 
 const SEG = 6;
-export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0], wind: [0, 9, 0], mine: [8, 13, 0] };
-export const PICK_RADIUS = { nuclear: 18, coal: 15, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14 };
+export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0], wind: [0, 9, 0], mine: [8, 13, 0], solar: [-9, 4, 0], battery: [-6, 4, 0] };
+export const PICK_RADIUS = { nuclear: 18, coal: 15, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14, solar: 11, battery: 8 };
 const groundY = (x, z) => Math.max(height(x, z), WATER_Y);
 
 export function attachPoint(n, out = new pc.Vec3()) {
@@ -51,14 +51,16 @@ export function buildWorld(app) {
   };
 
   // ---------- Cây cối rải rác: hardware instancing (cả rừng chỉ 2 draw call: thân + tán) ----------
+  let clearTrees = () => {};
   {
-    const rnd = seeded('trees'), trunks = [], crowns = [], q = new pc.Quat();
+    const rnd = seeded('trees'), trunks = [], crowns = [], spots = [], q = new pc.Quat();
     for (let i = 0; i < 520; i++) {
       const x = (rnd() - 0.5) * 2 * (MAP_HALF - 8), z = (rnd() - 0.5) * 2 * (MAP_HALF - 8), y = height(x, z);
       if (y < 0.3 || y > 10) continue;
       if (PADS.some(([px, pz, r]) => Math.hypot(x - px, z - pz) < r * 1.9 + 4)) continue; // không mọc trong khuôn viên công trình
       if (Math.abs(x - 4) < 40 && z > -58 && z < 2) continue;                           // khu nhà máy hạt nhân (cả Chernobyl)
       const s = 0.7 + rnd() * 0.7;
+      spots.push([x, z]);
       trunks.push(new pc.Mat4().setTRS(new pc.Vec3(x, y + 1 * s, z), q, new pc.Vec3(0.4 * s, 2 * s, 0.4 * s)));
       crowns.push(new pc.Mat4().setTRS(new pc.Vec3(x, y + 3.4 * s, z), q, new pc.Vec3(3 * s, 4 * s, 3 * s)));
     }
@@ -70,10 +72,19 @@ export function buildWorld(app) {
       const vb = new pc.VertexBuffer(app.graphicsDevice, pc.VertexFormat.getDefaultInstancingFormat(app.graphicsDevice), mats.length, { data });
       e.render.meshInstances[0].setInstancing(vb);
       e.render.meshInstances[0].cull = false; // hộp bao là của một cây, không dùng để loại khỏi khung nhìn
-      return e;
+      return { data, vb };
     };
-    instanced('cylinder', M.trunk, trunks);
-    instanced('cone', M.leaf, crowns);
+    const T = instanced('cylinder', M.trunk, trunks), C = instanced('cone', M.leaf, crowns);
+    // Xây công trình mới thì chặt cây trong khuôn viên (thu ma trận về 0 để GPU bỏ qua)
+    clearTrees = (x, z, r) => {
+      let hit = false;
+      spots.forEach(([tx, tz], i) => {
+        if (Math.hypot(tx - x, tz - z) > r) return;
+        for (const { data } of [T, C]) for (let j = 0; j < 16; j++) data[i * 16 + j] = 0;
+        hit = true;
+      });
+      if (hit) for (const { data, vb } of [T, C]) vb.setData(data);
+    };
   }
 
   // ---------- Hơi nước / khói (một bể hạt dùng chung) ----------
@@ -481,8 +492,8 @@ export function buildWorld(app) {
   }
   // Bán kính bao của từng loại công trình (để kiểm tra có nằm trong khung nhìn không)
   // Công trình gộp tĩnh được + các phần chuyển động cần giữ riêng (trả về danh sách thực thể)
-  const STATIC_NODES = { sub: (g) => g.children.filter((c) => c.name === 'fire'), border: (g) => g.children.filter((c) => c.name === 'moving') };
-  const VIEW_R = { nuclear: 60, city: 34, coal: 30, hydro: 34, sub: 14, border: 18, wind: 22, mine: 26 };
+  const STATIC_NODES = { solar: (g) => g.children.filter((c) => c.name === 'fire'), battery: (g) => g.children.filter((c) => c.name === 'fire' || c.name === 'moving'), sub: (g) => g.children.filter((c) => c.name === 'fire'), border: (g) => g.children.filter((c) => c.name === 'moving') };
+  const VIEW_R = { nuclear: 60, city: 34, coal: 30, hydro: 34, sub: 14, border: 18, wind: 22, mine: 26, solar: 18, battery: 14 };
   const cull = { shown: 0, hidden: 0 }, sph = new pc.BoundingSphere();
   const inView = (fr, x, y, z, r) => { sph.center.set(x, y, z); sph.radius = r; return fr.containsSphere(sph) > 0; };
   // Lều lính gác + xe quân sự cạnh công trình được canh gác
@@ -504,6 +515,7 @@ export function buildWorld(app) {
     for (const n of G.net.nodes) {
       if (nodeViews.has(n.id)) continue;
       const g = new pc.Entity(`node-${n.id}`); world.addChild(g);
+      if (PICK_RADIUS[n.type] && !['nuclear', 'coal', 'hydro', 'city'].includes(n.type)) clearTrees(n.x, n.z, PICK_RADIUS[n.type] + 3);
       const v = { g, update: builders[n.type](n, g), node: n, guard: n.type === 'border' ? null : makeGuard(n) };
       if (STATIC_NODES[n.type]) v.batch = staticBatch(g, `node-${n.id}`, STATIC_NODES[n.type](g)); // công trình ít chuyển động: gộp tĩnh
       nodeViews.set(n.id, v);
@@ -522,7 +534,7 @@ export function buildWorld(app) {
   const ghostLine = ent(world, 'box', [0, -50, 0], [0.4, 0.4, 1], M.ghostOk, false);
   ghost.enabled = ghostLine.enabled = false;
   const gp = new pc.Vec3(), gq = new pc.Vec3();
-  const GHOST_SIZE = { sub: [9, 7, 9], wind: [18, 18, 18], city: [22, 14, 22], tower: [18, 22, 18], road: [6, 1, 46], port: [10, 6, 18], airport: [50, 2, 7] };
+  const GHOST_SIZE = { sub: [9, 7, 9], wind: [18, 18, 18], solar: [20, 3, 16], battery: [14, 4, 10], city: [22, 14, 22], tower: [18, 22, 18], road: [6, 1, 46], port: [10, 6, 18], airport: [50, 2, 7] };
   function setGhost(G, mode, cursor, from) {
     const bt = mode?.startsWith('build:') ? mode.slice(6) : null;
     ghost.enabled = !!bt && !!cursor;

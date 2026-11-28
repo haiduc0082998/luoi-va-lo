@@ -3,7 +3,7 @@ import { fmt } from './util.js';
 import { needed, staffRatio, hireToNeed } from './workforce.js';
 import { restartState, beginStartup } from './startup.js';
 import { THREATS, CAMPAIGNS, campaign } from './city.js';
-import { units } from './game.js';
+import { units, hourOfDay as hourOf } from './game.js';
 import { fuelBalance } from './infra.js';
 
 /** Danh sách lời khuyên, khẩn cấp trước. lvl: 'bad' | 'warn' | ''. */
@@ -49,6 +49,10 @@ export function advice(G) {
       add(worst[1] >= 60 ? 'bad' : 'warn', `${THREATS[k].name} ở ${name}: ${fmt(worst[1])}/100. Vào thành phố để ${fix}, hoặc mở chiến dịch toàn quốc.`, CAMPAIGNS[k].name, () => campaign(G, k));
     }
   }
+  const hr = hourOf(G), coalNow = G.net.nodes.find((n) => n.id === 'coal')?.gen ?? 0, batteries = G.net.nodes.filter((n) => n.type === 'battery');
+  if (!batteries.length && hr >= 17 && hr <= 22 && coalNow > 60) add('', `Giờ cao điểm đang phải chạy ${fmt(coalNow)} MW nhiệt điện than (đắt nhất). Xây trạm pin lưu trữ: pin tự sạc bằng điện rẻ còn dư lúc trưa / đêm khuya và xả vào giờ này.`);
+  for (const b of batteries) if (!G.net.lines.some((l) => l.a === b.id || l.b === b.id)) add('warn', `${b.name} chưa nối dây vào lưới nên không sạc / xả được.`);
+  for (const p of G.net.nodes.filter((n) => n.type === 'solar')) if (!G.net.lines.some((l) => l.a === p.id || l.b === p.id)) add('warn', `${p.name} chưa nối dây vào lưới.`);
   if (G.budget < 5) add('warn', 'Ngân sách sắp cạn: tăng giá bán lẻ một chút, ký hợp đồng xuất khẩu vào giờ cao điểm (19–20 h), hoặc bán bớt công trình không cần.');
   if (G.approval < 45) add('warn', 'Lòng dân thấp: giữ đủ điện cho mọi thành phố, xây dịch vụ đô thị, giảm giá điện, chống tham nhũng.');
   if (!G.engineer) add('', 'Chưa có kỹ sư trưởng: tuyển trong cửa sổ Quốc gia để lò tự bám theo nhu cầu lưới và tự khởi động lại sau sự cố.');
@@ -71,5 +75,6 @@ export const GENERAL_TIPS = [
   'Ngân hàng mang lại thu nhập đều mỗi ngày; đài truyền hình chặn tin giả của nước thù địch.',
   'Cảnh sát giảm cả ma tuý lẫn khủng bố; lính gác ở trạm biến áp chặn được đánh bom.',
   'Giá điện khu vực đỉnh vào 19–20 h: đó là lúc xuất khẩu lời nhất.',
+  'Điện mặt trời phát mạnh nhất lúc trưa, bằng 0 về đêm; ghép với trạm pin để dời điện trưa sang cao điểm tối, khỏi đốt than.',
   'Đi xem bản đồ ở các vùng xa (nam, tây) cũng không làm chậm game: vùng ngoài màn hình được ẩn nhưng vẫn mô phỏng.',
 ];

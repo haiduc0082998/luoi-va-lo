@@ -16,6 +16,8 @@ export function createInfra(app, world, M, emit, groundY) {
     containers: ['#c0392b', '#2471a3', '#d4ac0d', '#27ae60'].map((c) => mat(c)), crane: mat('#f39c12', { metal: 0.4 }),
     pit: mat('#6e5440', { gloss: 0.05 }), pit2: mat('#584334', { gloss: 0.05 }), plane: mat('#f4f6f8', { gloss: 0.6 }), tail: mat('#2e86de'),
     runwayLight: mat('#202020', { emissive: '#7fd6ff', ei: 0 }),
+    panel: mat('#2b4f8f', { gloss: 0.8, metal: 0.25, emissive: '#0b1a33', ei: 0.4 }), frame: mat('#b9c0c4', { metal: 0.6 }),
+    container: mat('#eef1f2', { gloss: 0.4 }), stripe2: mat('#2a9d8f'),
   };
 
   // ---------- Nút lưới mới: trại gió, mỏ ----------
@@ -38,6 +40,42 @@ export function createInfra(app, world, M, emit, groundY) {
         const on = n.state === 'ok' && G.windNow >= 3 && G.windNow <= 25;
         a += (on ? 40 + G.windNow * 14 : 0) * dt;
         rotors.forEach((r, i) => r.setLocalEulerAngles(0, 0, -(a + i * 37)));
+      };
+    },
+    solar(n, g) {
+      // 6 hàng tấm pin nghiêng 25° về phía nam (+z), cột đỡ, tủ biến tần; bóng loáng để bắt nắng
+      const y0 = groundY(n.x, n.z);
+      g.setLocalPosition(n.x, y0, n.z);
+      for (let r = 0; r < 6; r++) {
+        const z = -7.5 + r * 3;
+        ent(g, 'box', [0, 1.45, z], [17.2, 0.1, 2.7], Mx.frame).setLocalEulerAngles(25, 0, 0); // khung nhôm
+        const row = ent(g, 'box', [0, 1.52, z], [16.8, 0.1, 2.5], Mx.panel);
+        row.setLocalEulerAngles(25, 0, 0);
+        for (const x of [-7, 0, 7]) ent(g, 'box', [x, 0.7, z + 0.3], [0.15, 1.4, 0.15], Mx.frame);
+      }
+      ent(g, 'box', [-10.5, 1, 0], [2, 2, 3], M.concrete);
+      ent(g, 'box', [-10.5, 2.1, 0], [2.2, 0.2, 3.2], Mx.frame);
+      return () => {};
+    },
+    battery(n, g) {
+      // 4 container pin (sọc xanh), quạt tản nhiệt trên nóc, máy biến áp; vạch đèn = mức pin (xanh sạc, cam xả)
+      const y0 = groundY(n.x, n.z);
+      g.setLocalPosition(n.x, y0, n.z);
+      ent(g, 'box', [0, 0.1, 0], [14, 0.2, 10], M.concrete);
+      for (const [x, z] of [[-3.2, -2.5], [3.2, -2.5], [-3.2, 2.5], [3.2, 2.5]]) {
+        ent(g, 'box', [x, 1.4, z], [5.6, 2.6, 2.4], Mx.container);
+        ent(g, 'box', [x, 1.4, z + 1.22], [5.6, 0.35, 0.05], Mx.stripe2);
+        for (const fx of [-1.6, 0, 1.6]) ent(g, 'cylinder', [x + fx, 2.8, z], [0.9, 0.2, 0.9], Mx.frame);
+      }
+      ent(g, 'box', [-8.5, 1.3, 0], [2.4, 2.6, 2.4], M.metal);
+      const holder = new pc.Entity('moving'); g.addChild(holder);
+      ent(holder, 'box', [0, 3.6, -4.8], [12, 0.5, 0.15], M.concrete, false);
+      const socMat = mat('#0a2a1a', { emissive: '#3ddc84', ei: 1.4 }); // riêng từng trạm
+      const bar = ent(holder, 'box', [0, 3.6, -4.9], [12, 0.4, 0.1], socMat, false);
+      return () => {
+        const k = Math.max(0.02, n.soc ?? 0.5);
+        bar.setLocalScale(12 * k, 0.4, 0.1); bar.setLocalPosition(-6 + 6 * k, 3.6, -4.9);
+        socMat.emissive = col(n.gen > 0.5 ? '#ffb02e' : '#3ddc84'); socMat.emissiveIntensity = n.state === 'ok' ? 1.4 : 0; socMat.update();
       };
     },
     mine(n, g) {
