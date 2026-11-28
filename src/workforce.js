@@ -11,7 +11,7 @@ export const WAGE = 22;          // USD / người / ngày (đã gồm bảo hi�
 export const HIRE_FEE = 300;     // USD / người: tuyển dụng, đào tạo an toàn
 export const SEVERANCE = 600;    // USD / người: trợ cấp thôi việc
 
-export function createStaff() { return { hired: 1100 }; }
+export function createStaff() { return { hired: 1350 }; } // đủ người cho mọi công trình ban đầu (cần ~1 300)
 
 /** Số người cần ngay lúc này (cả công trường đang thi công). */
 export function needed(G) {

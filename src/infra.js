@@ -1,6 +1,6 @@
 // Giai đoạn 6: xây dựng hạ tầng (năng lượng, đô thị, giao thông), tài nguyên uranium/đất hiếm, mỏ, bán công trình.
 import { createNode } from './physics/network.js';
-import { buildable, inRiver, riverCenter, height, MAP_HALF } from './map.js';
+import { buildable, inRiver, riverCenter, height, MAP_HALF, WATER_Y, inSea, nearSea } from './map.js';
 import { news } from './news.js';
 import { fmt } from './util.js';
 
@@ -35,8 +35,8 @@ export function canPlace(G, type, x, z) {
   if (Math.abs(x) > MAP_HALF - 12 || Math.abs(z) > MAP_HALF - 12) return 'Ngoài bản đồ';
   if (G.infra.some((s) => near(s.x, s.z, type === 'airport' || s.type === 'airport' ? 26 : 12))) return 'Quá gần công trình khác';
   if (type === 'port') {
-    const d = Math.abs(x - riverCenter(z));
-    if (d < 6 || d > 12) return 'Cảng phải nằm sát bờ sông';
+    const d = Math.abs(x - riverCenter(z)), sea = !inSea(x, z) && height(x, z) > WATER_Y && nearSea(x, z, 10);
+    if (!sea && (d < 6 || d > 12)) return 'Cảng phải nằm sát bờ sông hoặc bờ biển';
     if (G.net.nodes.some((n) => near(n.x, n.z, 10))) return 'Quá gần công trình khác';
     return '';
   }
@@ -51,6 +51,8 @@ export function canPlace(G, type, x, z) {
     const hs = [-22, -11, 0, 11, 22].flatMap((dx) => [-4, 4].map((dz) => height(x + dx, z + dz)));
     if (Math.max(...hs) - Math.min(...hs) > 5) return 'Địa hình không đủ bằng cho đường băng';
   }
+  // Trại gió ngoài khơi: đặt được trên thềm biển nông (sâu tới ~10 đơn vị), gió biển mạnh và đều hơn
+  if (type === 'wind' && inSea(x, z)) return height(x, z) > -11 ? (G.net.nodes.some((n) => near(n.x, n.z, 14)) ? 'Quá gần công trình khác' : '') : 'Biển quá sâu cho móng trại gió';
   const why = buildable(x, z, G.net.nodes);
   if (why && !(type === 'wind' && why.startsWith('Địa hình') && height(x, z) < 15)) return why;
   if (type === 'road' && G.net.nodes.some((n) => near(n.x, n.z, 14))) return 'Quá gần công trình khác';
@@ -68,12 +70,13 @@ export function build(G, type, x, z) {
   if (GRID_TYPES.includes(type)) {
     const k = count(G, type) + 1;
     const name = type === 'sub' ? `Trạm ${String.fromCharCode(64 + ((G.subCount++ % 26) + 1))}` : type === 'wind' ? `Trại gió số ${k}` : type === 'solar' ? `Điện mặt trời số ${k}` : type === 'battery' ? `Trạm pin số ${k}` : `Khu đô thị mới ${k}`;
-    made = createNode({ name, type, x, z, built: true, sellable: true, cost, ...(type === 'city' ? { demandBase: 200 } : {}) });
+    made = createNode({ name, type, x, z, built: true, sellable: true, cost, ...(type === 'city' ? { demandBase: 200 } : {}), ...(type === 'wind' && inSea(x, z) ? { offshore: true, name: `Gió ngoài khơi số ${k}` } : {}) });
     G.net.nodes.push(made);
   } else {
     const nuc = G.net.nodes.find((n) => n.id === 'nuc');
     const city = G.net.nodes.filter((n) => n.type === 'city').sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))[0];
-    const yaw = type === 'road' ? Math.atan2(city.x - x, city.z - z) : type === 'port' ? Math.atan2(1, 12 * 0.03 * Math.cos(z * 0.03)) : 0;
+    const seaDir = type === 'port' && Math.abs(x - riverCenter(z)) > 12 ? [0, 1, 2, 3, 4, 5, 6, 7].map((k) => k * Math.PI / 4).find((a) => inSea(x + 10 * Math.cos(a), z + 10 * Math.sin(a))) : undefined;
+    const yaw = type === 'road' ? Math.atan2(city.x - x, city.z - z) : seaDir !== undefined ? Math.atan2(Math.cos(seaDir), Math.sin(seaDir)) + Math.PI / 2 : type === 'port' ? Math.atan2(1, 12 * 0.03 * Math.cos(z * 0.03)) : 0;
     made = { id: `s${seq++}`, type, x, z, yaw, cost, name: `${B.name} ${count(G, type) + 1}`, near: type === 'tower' ? nuc.id : null };
     G.infra.push(made);
   }

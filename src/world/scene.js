@@ -568,7 +568,7 @@ export function buildWorld(app) {
   bounce.addComponent('light', { type: 'directional', castShadows: false, color: col('#7f9e6a'), intensity: 0.25 });
   bounce.setEulerAngles(180, 0, 20);
   world.addChild(bounce);
-  app.scene.fog.type = pc.FOG_LINEAR; app.scene.fog.start = 200; app.scene.fog.end = 560;
+  app.scene.fog.type = pc.FOG_LINEAR; app.scene.fog.start = 240; app.scene.fog.end = 700;
   const NIGHT = col('#0b1420'), DAYW = new pc.Color(), FLASH = col('#e8eeff'), sky = new pc.Color();
   let time = 0;
 
@@ -608,7 +608,7 @@ export function buildWorld(app) {
     starMat.emissiveIntensity = clamp((0.35 - day) * 4, 0, 1) * (1 - 0.8 * w.cover) * (0.85 + 0.15 * Math.sin(time * 1.7)); starMat.update();
     stars.enabled = starMat.emissiveIntensity > 0.01;
     animateWater(time, G.windNow ?? 5);
-    app.scene.fog.start = w.fog?.[0] ?? 200; app.scene.fog.end = w.fog?.[1] ?? 560;
+    app.scene.fog.start = w.fog?.[0] ?? 240; app.scene.fog.end = w.fog?.[1] ?? 700;
     if (mode === 'nation') {
       const fr0 = camera.camera.frustum;
       cull.shown = 0; cull.hidden = 0;

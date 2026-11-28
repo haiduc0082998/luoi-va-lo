@@ -163,13 +163,14 @@ const minRelation = (G) => Math.min(...G.world.countries.map((c) => c.relation))
 const clampT = (x) => Math.max(0, Math.min(100, x));
 
 /** Diễn biến mối nguy trong một thành phố; dt tính theo ngày. Có thể gây khủng bố. */
+const EASE = 0.75; // mối nguy tăng chậm hơn 25 % (dễ chơi hơn); giảm nhờ cảnh sát / truyền hình giữ nguyên
 export function threatStep(G, C, n, day, rnd = Math.random) {
   const P = C.parts, T = C.threat, war = G.world.war, rel = minRelation(G);
   const port = n.id === 'port' || (G.infra ?? []).some((s) => s.type === 'port') ? 1 : 0;
   const before = { ...T };
-  T.drugs = clampT(T.drugs + day * (3 * (1 - (P.police ?? 0)) + 4 * port * (1 - (P.police ?? 0)) + (55 - C.happiness) / 15 - 5 * (P.police ?? 0) - 2 * (P.health ?? 0)));
-  T.terror = clampT(T.terror + day * (1.5 + (war ? 7 : 0) + Math.max(0, (45 - rel) / 8) - 5 * (P.police ?? 0) - (G.decrees.martial ? 4 : 0) - (G.decrees.defense ? 1.5 : 0)));
-  T.prop = clampT(T.prop + day * (2.5 + Math.max(0, (55 - rel) / 7) + (G.approval < 40 ? 2 : 0) + (war ? 3 : 0) - 8 * (P.media ?? 0)));
+  T.drugs = clampT(T.drugs + day * (EASE * (3 * (1 - (P.police ?? 0)) + 4 * port * (1 - (P.police ?? 0)) + (55 - C.happiness) / 15) - 5 * (P.police ?? 0) - 2 * (P.health ?? 0)));
+  T.terror = clampT(T.terror + day * (EASE * (1.5 + (war ? 7 : 0) + Math.max(0, (45 - rel) / 8)) - 5 * (P.police ?? 0) - (G.decrees.martial ? 4 : 0) - (G.decrees.defense ? 1.5 : 0)));
+  T.prop = clampT(T.prop + day * (EASE * (2.5 + Math.max(0, (55 - rel) / 7) + (G.approval < 40 ? 2 : 0) + (war ? 3 : 0)) - 8 * (P.media ?? 0)));
   for (const k of Object.keys(THREATS)) if (before[k] < 50 && T[k] >= 50) news(G, `${n.name}: ${THREATS[k].name.toLowerCase()} lên mức nguy hiểm (${fmt(T[k])}/100). ${k === 'drugs' ? 'Xây đồn cảnh sát, bệnh viện hoặc truy quét.' : k === 'terror' ? 'Tăng cảnh sát, canh gác công trình hoặc mở chiến dịch an ninh.' : 'Xây đài truyền hình hoặc mở chiến dịch truyền thông.'}`, 'warn');
   // Khủng bố: xác suất tấn công tỉ lệ mức nguy; trạm có lính gác thì bị chặn
   const pAttack = (T.terror / 100) ** 2 * 1.2 * day;

@@ -165,10 +165,10 @@ export function createInfra(app, world, M, emit, groundY) {
   const cloudMat = mat('#e7ecef', { opacity: 0 });
   // Mây: mô hình cloud.glb (người chơi gửi, đã giảm còn ~1 450 tam giác), dùng chung vật liệu mờ dần theo độ phủ mây
   const toCloudMat = (e) => { for (const r of e.findComponents('render')) for (const mi of r.meshInstances) { mi.material = cloudMat; mi.castShadow = false; } };
-  const clouds = Array.from({ length: 22 }, (_, i) => {
+  const clouds = Array.from({ length: 28 }, (_, i) => {
     const L = 40 + (i % 4) * 12;
     const e = new pc.Entity('cloud'); world.addChild(e);
-    e.setLocalPosition(((i * 37) % 360) - 180, 70 + (i % 3) * 8, ((i * 53) % 340) - 170);
+    e.setLocalPosition(((i * 37) % 460) - 230, 70 + (i % 3) * 8, ((i * 53) % 440) - 220);
     e.setLocalScale(L, L * 0.45, L * 1.1); e.setLocalEulerAngles(0, (i * 47) % 360, 0);
     const tmp = ent(e, 'sphere', [0, 0, 0], [1, 0.5, 0.6], cloudMat, false);
     model(e, 'cloud', 1, 0, tmp, toCloudMat);
@@ -184,7 +184,7 @@ export function createInfra(app, world, M, emit, groundY) {
     return { e, wait: i * 25, from: new pc.Vec3(), to: new pc.Vec3(), u: 1, len: 1 };
   });
   const relaunch = (a) => {
-    const th = Math.random() * Math.PI * 2, y = 62 + Math.random() * 14, R = 260, off = (Math.random() - 0.5) * 160;
+    const th = Math.random() * Math.PI * 2, y = 62 + Math.random() * 14, R = 320, off = (Math.random() - 0.5) * 160;
     a.from.set(Math.cos(th) * R - Math.sin(th) * off, y, Math.sin(th) * R + Math.cos(th) * off);
     a.to.set(-Math.cos(th) * R - Math.sin(th) * off, y, -Math.sin(th) * R + Math.cos(th) * off);
     a.len = a.from.distance(a.to); a.u = 0;
@@ -201,7 +201,7 @@ export function createInfra(app, world, M, emit, groundY) {
   function weather(G, dt, target) {
     const w = G.weather, W = WEATHERS[w.id], cover = W.cover;
     cloudMat.opacity += ((cover * 0.75) - cloudMat.opacity) * Math.min(1, dt); cloudMat.diffuse = W.grey ? col('#6b747c') : col('#e7ecef'); cloudMat.update();
-    for (const c of clouds) { const p = c.getLocalPosition(); c.setLocalPosition(p.x > 230 ? -230 : p.x + dt * (G.windNow ?? 5) * 0.8, p.y, p.z); }
+    for (const c of clouds) { const p = c.getLocalPosition(); c.setLocalPosition(p.x > 280 ? -280 : p.x + dt * (G.windNow ?? 5) * 0.8, p.y, p.z); }
     strobeT += dt;
     strobeMat.emissiveIntensity = strobeT % 1.2 < 0.08 ? 6 : 0; strobeMat.update();
     for (const a of airliners) {

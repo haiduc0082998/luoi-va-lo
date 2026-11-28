@@ -66,6 +66,7 @@ for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x,
 // Khu nhà máy hạt nhân (mô hình cụm 4 khối lò, tỉ lệ NUC_SCALE, quay 180°) trải về phía đông bắc tâm lò:
 // san phẳng thêm một mặt bằng ở giữa khu để các toà nhà không chìm / lơ lửng.
 export const NUC_SCALE = 0.28;
+export const GRANT_PER_DAY = 1.5; // triệu USD/ngày ở lòng dân 100 % (×0,5–1)
 { const n = INITIAL_NODES.find((x) => x.type === 'nuclear'); PADS.push([n.x + 50 * NUC_SCALE, n.z - 22 * NUC_SCALE, 95 * NUC_SCALE]); }
 
 export function createGame() {
@@ -73,7 +74,7 @@ export function createGame() {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const lines = INITIAL_LINES.map((l) => createLine({ ...l, L: lineLengthKm(byId.get(l.a), byId.get(l.b)), Tw: 30 }));
   return {
-    t: 0, speed: 300 /* mặc định 300×: một ngày game ≈ 4,8 phút thực */, approval: 62, budget: 20, inflation: 2, corruption: 15, priceLevel: 1, Ta: 30,
+    t: 0, speed: 300 /* mặc định 300×: một ngày game ≈ 4,8 phút thực */, approval: 65, budget: 50 /* vốn khởi đầu 50 triệu USD (trước 20) */, inflation: 2, corruption: 15, priceLevel: 1, Ta: 30,
     news: [], listeners: new Set(), protest: false, newsAcc: 0, engAcc: 0,
     net: { nodes, lines }, reactor: createReactor(), reactor2: null, unit2: { state: 'none', progress: 0 },
     coalMax: COAL_MAX, gridFault: false, wasOffsite: true,
@@ -83,7 +84,7 @@ export function createGame() {
     reputation: 60, factions: { business: 55, military: 55 },
     decrees: { subsidy: false, monopoly: false, defense: false, martial: false },
     world: createWorld(), weather: createWeather(), res: createResources(), infra: [], cities: {}, happiness: 55, cityAcc: 60, cityVersion: 0,
-    tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 20, profitPerH: 0,
+    tech: new Set(), rp: 0, researchBudget: 0.2, danger: {}, over: null, lastBudget: 50, profitPerH: 0,
     missions: { done: [], held: {} },
     staff: createStaff(), repair: {},
   };
@@ -159,6 +160,9 @@ function politics(G, dt) {
   G.budget -= (coalGen * COAL_USD_MWH * (sanction ? 1.3 : 1) * (G.world.coalDealUntil > G.t ? 0.75 : 1) * G.priceLevel * h) / 1e6;
   if (G.engineer) G.budget -= G.engineer.salary * G.priceLevel * day;
   G.budget -= (G.researchBudget + (G.decrees.defense ? 0.25 : 0)) * G.priceLevel * day;
+  // Ngân sách trung ương cấp cho Bộ Năng lượng mỗi ngày: ~1,5 triệu USD, nhiều hơn khi được lòng dân
+  G.grantPerDay = GRANT_PER_DAY * (0.5 + G.approval / 200) * G.priceLevel;
+  G.budget += G.grantPerDay * day;
   G.rp += rpPerDay(G) * day;
   G.profitPerH += ((G.budget - b0) / h - G.profitPerH) * Math.min(1, dt / 3600);
 
@@ -212,7 +216,7 @@ function slowStep(G, h) {
   const crew = crewFactor(G);
   G.repairK = 0.4 + 0.6 * staffRatio(G); // tốc độ sửa chữa theo nhân công (dùng ở nhịp nhanh)
   const cap = { nuc: nuc.state === 'ok' ? (U.reduce((s, r) => s + r.Pe, 0) / 1e6) * crew : 0, coal: coal.state === 'ok' ? G.coalMax * capMul(coal) * crew : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro * capMul(hyd) * crew : 0 };
-  for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind) * capMul(n) * crew;
+  for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind * (n.offshore ? 1.12 : 1)) * (n.offshore ? 1.2 : 1) * capMul(n) * crew; // ngoài khơi: gió mạnh hơn ~12 % (công suất ~ lập phương) và tuabin lớn hơn 20 %
   const sunMW = solarFarmMW(hourOfDay(G), W, G.Ta);
   for (const n of G.net.nodes) {
     if (n.type === 'solar' && n.state === 'ok') cap[n.id] = sunMW * capMul(n) * crew;

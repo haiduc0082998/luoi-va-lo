@@ -88,7 +88,7 @@ function exitCity() {
   if (C?.draft) City.finishLine(G, C);
   const n = Game.nodeById(G, cityId);
   cityId = null; world.setMode('nation'); world.cityView.setGhost(null);
-  camera.setBounds(0, 0, 190);
+  camera.setBounds(0, 0, 230);
   camera.focus(n.x, 4, n.z, 90, 30, 32); camera.jump();
   document.body.classList.remove('in-city');
   cityPanel.show(false);
@@ -281,7 +281,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '?') bar.toggleKeys();
 });
 
-if (!loaded) Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ba nhà máy, hai trạm, hai thành phố và cửa khẩu sang nước láng giềng đang chờ lệnh. Bấm vào công trình để điều khiển.');
+if (!loaded) Game.news(G, 'Chào mừng Bộ trưởng Năng lượng. Ngân sách 50 triệu USD, ba nhà máy, bốn thành phố, cửa khẩu sang nước láng giềng và bờ biển phía tây nam đang chờ lệnh. Bấm vào công trình để điều khiển; nút Mẹo bên phải có lời khuyên.');
 setTool('select');
 app.start();
 window.__game = G; window.__world = world; // để kiểm thử và gỡ lỗi

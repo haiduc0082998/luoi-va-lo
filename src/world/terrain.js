@@ -3,7 +3,7 @@ import * as pc from 'playcanvas';
 import { height, MAP_HALF, WATER_Y, BORDER_X } from '../map.js';
 import { seeded } from '../rng.js';
 
-const STEPS = 190; // bản đồ 380 × 380: mỗi ô 2 đơn vị; 191² ≈ 36 nghìn đỉnh dùng chung (chỉ số 16 bit)
+const STEPS = 230; // bản đồ 460 × 460: mỗi ô 2 đơn vị; 231² ≈ 53 nghìn đỉnh dùng chung (vẫn vừa chỉ số 16 bit)
 
 const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
@@ -16,6 +16,7 @@ function colorFor(y, slope, n) {
   c = mix(c, ROCK, Math.max(smooth(8, 12, y + n), smooth(0.45, 0.75, slope + n * 0.05))); // đá: cao hoặc dốc
   c = mix(c, SNOW, smooth(15, 19, y + n * 1.5));               // tuyết trên đỉnh
   c = mix(c, SAND, smooth(-0.6, -1.6, y));                      // bãi cát / lòng sông
+  c = mix(c, [70, 96, 104], smooth(-4, -12, y));                // đáy biển sâu thẫm dần
   const k = 1 + n * 0.05;                                       // loang lổ nhẹ cho tự nhiên
   return [c[0] * k, c[1] * k, c[2] * k];
 }
@@ -73,14 +74,22 @@ export function buildTerrain(app, parent) {
   wmat.blendType = pc.BLEND_NORMAL; wmat.depthWrite = false; wmat.useMetalness = true; wmat.metalness = 0.15;
   // Gợn sóng: hai lớp normal map dựng bằng code, trôi theo hai hướng khác nhau (xem animateWater)
   const waves = waveNormalTexture(app);
-  wmat.normalMap = waves; wmat.normalMapTiling = new pc.Vec2(18, 18); wmat.bumpiness = 0.55;
-  wmat.normalDetailMap = waves; wmat.normalDetailMapTiling = new pc.Vec2(47, 47); wmat.normalDetailMapBumpiness = 0.5;
+  const WT = (size + 1400) / 22; // một ô sóng ~22 đơn vị dù mặt nước trải tới chân trời
+  wmat.normalMap = waves; wmat.normalMapTiling = new pc.Vec2(WT, WT); wmat.bumpiness = 0.4;
+  wmat.normalDetailMap = waves; wmat.normalDetailMapTiling = new pc.Vec2(WT * 2.7, WT * 2.7); wmat.normalDetailMapBumpiness = 0.5;
   wmat.update();
   waterMat = wmat;
   const water = new pc.Entity('water');
   water.addComponent('render', { type: 'plane', material: wmat, castShadows: false });
-  water.setLocalPosition(0, WATER_Y, 0); water.setLocalScale(size, 1, size);
+  // Mặt nước: sông/hồ trong bản đồ + biển trải ra tới chân trời ở phía tây và phía nam
+  const EXT = 1400;
+  water.setLocalPosition(-EXT / 2, WATER_Y, EXT / 2); water.setLocalScale(size + EXT, 1, size + EXT);
   parent.addChild(water);
+  // Đáy biển sâu ngoài rìa bản đồ (để nhìn xuyên mặt nước thấy biển thẫm màu thay vì trống)
+  const bedMat = new pc.StandardMaterial(); bedMat.diffuse = new pc.Color().fromString('#173543'); bedMat.gloss = 0.05; bedMat.update();
+  const bed = new pc.Entity('seabed'); bed.addComponent('render', { type: 'plane', material: bedMat, castShadows: false, receiveShadows: false });
+  bed.setLocalPosition(-EXT / 2, -19, EXT / 2); bed.setLocalScale(size + EXT, 1, size + EXT);
+  parent.addChild(bed);
   return e;
 }
 
@@ -117,7 +126,13 @@ export function animateWater(t, wind = 5) {
 /** Normal map lặp liền mạch 128×128 từ tổng các sóng sin (hướng và bước sóng ngẫu nhiên cố định). */
 function waveNormalTexture(app) {
   const N = 128, h = new Float32Array(N * N), rnd = seeded('waves');
-  const waves = Array.from({ length: 9 }, () => ({ kx: Math.round(rnd() * 8 - 4) || 1, kz: Math.round(rnd() * 8 - 4), a: 0.4 + rnd(), p: rnd() * 6.283 }));
+  // 16 sóng theo đủ hướng chéo (vector sóng nguyên để lặp liền mạch), bước sóng ngắn thì biên độ nhỏ → mặt nước không thành lưới
+  const waves = [];
+  while (waves.length < 16) {
+    const kx = Math.round(rnd() * 14 - 7), kz = Math.round(rnd() * 14 - 7), k = Math.hypot(kx, kz);
+    if (k < 2.5 || kx === 0 || kz === 0) continue;
+    waves.push({ kx, kz, a: (0.5 + rnd()) / Math.sqrt(k), p: rnd() * 6.283 });
+  }
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     let v = 0;
     for (const w of waves) v += (w.a * Math.sin(((w.kx * i + w.kz * j) / N) * 6.283 + w.p)) / Math.hypot(w.kx, w.kz);

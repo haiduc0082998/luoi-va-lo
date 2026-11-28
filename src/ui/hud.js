@@ -51,7 +51,7 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
   $('buildMenu').addEventListener('click', (e) => { const b = e.target.closest('[data-b]'); if (!b) return; ui.tool = `build:${b.dataset.b}`; $('buildMenu').hidden = true; onTool(ui.tool); });
   $('weatherBtn').addEventListener('click', () => cycleWeather(G));
   let view = 'overview';
-  seg('views', ['overview', 'nuclear', 'capital', 'west', 'south', 'coast'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây', south: 'Nam Bình', coast: 'Tây Hải' }[v]), () => view, (v) => { view = v; onView(v); });
+  seg('views', ['overview', 'nuclear', 'capital', 'west', 'south', 'coast', 'sea'], (v) => ({ overview: 'Toàn cảnh', nuclear: 'Hạt nhân', capital: 'Thủ phủ', west: 'Miền Tây', south: 'Nam Bình', coast: 'Tây Hải', sea: 'Cửa biển' }[v]), () => view, (v) => { view = v; onView(v); });
   seg('newKv', [10.5, 110, 220, 500, 750], kvText, () => ui.newKv, (v) => (ui.newKv = v));
   $('sc').addEventListener('click', () => { ui.sc = !ui.sc; });
   seg('newA', [95, 150, 240, 400, 630], (v) => v, () => ui.newA, (v) => (ui.newA = v));
@@ -317,6 +317,8 @@ export function createHud(G, { onTool, onView, onSelect, onQuality }) {
     flag('apV', G.approval < 45 ? 'bad' : why.length ? 'info' : null, `Lòng dân ${fmt(G.approval)}%${why.length ? `, đang bị kéo xuống vì: ${why.join(', ')}` : ''}. Bấm để xem cố vấn.`);
     flag('sec', S.demand > 0 && S.served / S.demand < 0.99 ? 'bad' : null, `Chỉ cấp được ${fmt(S.served)}/${fmt(S.demand)} MW. Cần thêm nguồn hoặc đường dây tới thành phố đang thiếu.`);
     flag('budget', G.budget < 5 ? 'bad' : G.profitPerH < 0 ? 'info' : null, `Ngân sách ${G.profitPerH < 0 ? `đang giảm ${fmt(-G.profitPerH * 24, 1)} triệu USD/ngày` : 'thấp'}: tăng giá điện, xuất khẩu giờ cao điểm 19–20 h, giảm nhiệt điện than (đắt nhất), bớt chi nghiên cứu.`);
+    const bh = $('budget').parentElement;
+    if (!bh.querySelector('.wflag')) bh.title = `Thu chi khoảng ${G.profitPerH >= 0 ? '+' : ''}${fmt(G.profitPerH * 24, 1)} triệu USD/ngày, trong đó trung ương cấp ${fmt(G.grantPerDay ?? 0, 2)} triệu/ngày (nhiều hơn khi được lòng dân).`;
     flag('infl', G.inflation > 6 ? 'bad' : null, 'Lạm phát cao: ngừng in tiền, giữ đủ điện cho dân (thiếu điện đẩy giá lên).');
     flag('corr', G.corruption > 35 ? 'bad' : null, 'Tham nhũng cao: mọi công trình đắt hơn, nâng cấp dễ thất bại. Mở thanh tra trong cửa sổ Quốc gia, nghiên cứu Kiểm toán.');
     flag('resU', fb.days < 2 ? 'bad' : fb.days < 6 ? 'info' : null, `Uranium ${fmt(G.res.U, 1)} t: lò đốt ${fmt(fb.burn, 2)} t/ngày (tỉ lệ công suất nhiệt), mỏ làm ra ${fmt(fb.made, 2)} t/ngày → ${Number.isFinite(fb.days) ? `còn đủ khoảng ${fmt(fb.days, 1)} ngày` : 'không thâm hụt'}. Chạy lò thấp hơn để tiết kiệm, nâng cấp mỏ hoặc làm đường tới mỏ.`);

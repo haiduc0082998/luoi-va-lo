@@ -13,7 +13,7 @@ npm run build    # xuất bản tĩnh vào dist/
 
 Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, build rồi đăng lên GitHub Pages. Lần đầu cần bật: **Settings → Pages → Source: GitHub Actions**.
 
-## Có gì trong bản này (Giai đoạn 1–11)
+## Có gì trong bản này (Giai đoạn 1–12)
 
 **Bản đồ 3D**
 - Địa hình low-poly: đồi, dãy núi tuyết phía bắc, sông uốn lượn, hồ.
@@ -214,6 +214,19 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
   - Đồ hoạ thấp chỉ hiện một nửa số xe và người.
   - Màn hình mật độ cao trên điện thoại vẽ tối đa 1,5×.
   - Tắt khử răng cưa ở cấp thiết bị, vì hậu kỳ đã tự khử răng cưa.
+
+**Giai đoạn 12: biển, bản đồ 460 × 460, dễ chơi hơn**
+- **Biển:**
+  - Bờ biển phía tây và phía nam uốn lượn, có bãi thoải, thềm nông rồi sâu dần; sông đổ ra cửa biển ở phía nam.
+  - Mặt biển trải tới chân trời, có đáy biển thẫm bên dưới. Góc nhìn mới: **Cửa biển**.
+  - **Cảng biển:** cảng xây được sát bờ biển, không chỉ ven sông.
+  - **Trại gió ngoài khơi:** đặt trên thềm biển nông (sâu tới khoảng 10). Gió biển mạnh hơn 12% và tuabin lớn hơn 20%, nên phát nhiều hơn trại trên bờ.
+  - Không xây được dưới biển hay dưới hồ nước.
+- **Bản đồ 460 × 460** (trước là 380 × 380): lưới địa hình 230 × 230; camera, mây, máy bay, sương mù nới theo.
+- **Dễ chơi hơn:**
+  - Vốn khởi đầu 50 triệu USD (trước 20); lòng dân khởi đầu 65%; thuê sẵn đủ nhân công.
+  - **Ngân sách trung ương cấp hằng ngày** khoảng 0,75–1,5 triệu USD, nhiều hơn khi được lòng dân. Rê chuột lên ô Ngân sách để xem thu chi mỗi ngày.
+  - Ma tuý, khủng bố, tuyên truyền tăng chậm hơn 25%; cảnh sát và đài truyền hình vẫn đẩy lùi với tốc độ cũ.
 
 ## Cấu trúc mã
 
