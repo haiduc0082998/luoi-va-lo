@@ -5,7 +5,7 @@ import { clamp } from '../util.js';
 
 export const VIEWS = {
   overview: { target: [-5, 0, 15], yaw: 20, pitch: 50, dist: 340 },
-  nuclear: { target: [12, 6, -30], yaw: -30, pitch: 32, dist: 78 },
+  nuclear: { target: [16, 3, -32], yaw: -150, pitch: 36, dist: 70 },
   capital: { target: [52, 4, 20], yaw: 30, pitch: 30, dist: 80 },
   west: { target: [-40, 4, 30], yaw: -20, pitch: 34, dist: 110 },
   south: { target: [46, 4, 140], yaw: 15, pitch: 32, dist: 90 },

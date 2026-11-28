@@ -5,7 +5,7 @@ import { news } from './news.js';
 import { fmt } from './util.js';
 
 /** Số người cần cho mỗi loại công trình (kíp vận hành 3 ca). */
-export const CREW = { nuclear: 450, coal: 260, hydro: 90, sub: 24, wind: 18, mine: 160, border: 30, city: 0 };
+export const CREW = { nuclear: 450, coal: 260, hydro: 90, sub: 24, wind: 18, solar: 12, battery: 10, mine: 160, border: 30, city: 0 };
 export const INFRA_CREW = { port: 140, airport: 160, tower: 12, road: 8, wind: 18 };
 export const WAGE = 22;          // USD / người / ngày (đã gồm bảo hiểm)
 export const HIRE_FEE = 300;     // USD / người: tuyển dụng, đào tạo an toàn

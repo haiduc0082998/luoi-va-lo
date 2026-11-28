@@ -40,6 +40,13 @@ export function cycleWeather(G) {
 
 /** Gió dao động ngẫu nhiên quanh giá trị trung bình (pha khác nhau mỗi đợt thời tiết, có cơn giật). */
 export const windNow = (G) => { const s = G.weather.seed ?? 0; return Math.max(0, current(G).wind * (1 + 0.25 * Math.sin(G.t / 1700 + s) + 0.1 * Math.sin(G.t / 330 + 2 * s) + 0.08 * Math.sin(G.t / 47 + 3 * s))); };
+/** Trại điện mặt trời 100 MW: theo góc mặt trời trong ngày, giảm theo mây (đến −75 %) và nhiệt độ tấm pin (−0,4 %/°C trên 25 °C). */
+export const SOLAR_MW = 100;
+export function solarFarmMW(hour, W, Ta) {
+  const sun = Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI)) ** 1.2;
+  return SOLAR_MW * sun * (1 - 0.75 * W.cover) * (1 - 0.004 * Math.max(0, Ta + 15 - 25)); // tấm pin nóng hơn không khí ~15 °C
+}
+
 /** Nhiệt độ không khí dao động ±2 °C quanh giá trị của kiểu thời tiết. */
 export const airTemp = (G) => current(G).Ta + 2 * Math.sin(G.t / 5200 + (G.weather.seed ?? 0));
 

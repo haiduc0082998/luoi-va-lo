@@ -127,17 +127,30 @@ def ruin_boxes(x0, x1, z0, z1, h):
 
 
 def chernobyl_complex():
+    """Cụm 4 khối lò làm nhà máy hạt nhân của game. Khối thứ 4 (hall3) = tổ máy 1, khối thứ 3 (hall2) = tổ máy 2.
+    Tách riêng để game bật/tắt: Unit1/Unit2 (khối lò), *_Win (cửa sổ, sáng đèn về đêm), Windows (cửa sổ các khối
+    khác), Arch (mái vòm che an toàn), Unit*_Ruin / Unit*_Rubble (đổ nát tự dựng khi lò nổ)."""
     items = list(parts(os.path.join(SRC, 'chernobyl_game_complex.glb'), skip=('terrain',)))
-    unit4 = lambda n: n in ('hall3', 'roof3') or n.startswith('window3_')
-    groups = by_color([it for it in items if not unit4(it[0]) and it[0] != 'arch_canopy'])
-    r4 = [it for it in items if unit4(it[0])]
-    groups['Reactor4'] = (r4[0][2], [m for _, m, _ in r4])  # gộp thành một nút để bật/tắt khi lò nổ
-    arch = [it for it in items if it[0] == 'arch_canopy'][0]
-    groups['Arch'] = (arch[2], [arch[1]])
-    walls, rubble = ruin_boxes(35, 65, -24.5, 0.5, 14)
-    groups['Reactor4_Ruin'] = ((60, 56, 52, 255), walls)
-    groups['Reactor4_Rubble'] = ((38, 40, 42, 255), rubble)
-    for _, (c, ms) in groups.items():  # gốc toạ độ: tâm lò số 4 (hall3: x 35..65, z −24,5..0,5)
+    special = {}
+    def tag(n):
+        for u, h in ((1, 3), (2, 2)):
+            if n in (f'hall{h}', f'roof{h}'): return f'Unit{u}'
+            if n.startswith(f'window{h}_'): return f'Unit{u}_Win'
+        if n.startswith('window'): return 'Windows'
+        if n == 'arch_canopy': return 'Arch'
+        return None
+    rest = []
+    for it in items:
+        t = tag(it[0])
+        if t: special.setdefault(t, (it[2], []))[1].append(it[1])
+        else: rest.append(it)
+    groups = by_color(rest)
+    groups.update(special)
+    for u, (x0, x1) in ((1, (35, 65)), (2, (0, 30))):
+        walls, rubble = ruin_boxes(x0, x1, -24.5, 0.5, 14)
+        groups[f'Unit{u}_Ruin'] = ((60, 56, 52, 255), walls)
+        groups[f'Unit{u}_Rubble'] = ((38, 40, 42, 255), rubble)
+    for _, (c, ms) in groups.items():  # gốc toạ độ: tâm tổ máy 1 (hall3: x 35..65, z −24,5..0,5)
         for m in ms: m.apply_translation((-50, 0, 12))
     out = os.path.join(OUT, 'chernobyl-complex.glb')
     sc = export_groups(groups, out, double=('Arch',))

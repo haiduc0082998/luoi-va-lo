@@ -5,14 +5,14 @@ Các mô hình dựng từ macro FreeCAD (thư mục `source/`). Ở đây khôn
 | Macro gốc (`source/`) | File game (`public/models/`) | Dùng ở đâu trong game |
 |---|---|---|
 | `Boeing737_800_CAD_macro.FCMacro` | `boeing737-800.glb` | Máy bay ở sân bay, máy bay bay qua thành phố |
-| `Cooling_Tower_CAD.FCMacro` | `cooling-tower.glb` | Mọi tháp làm mát (nhà máy hạt nhân, công trình “tháp làm mát”) — tháp 150 m thu về cao 22 đơn vị |
+| `Cooling_Tower_CAD.FCMacro` | `cooling-tower.glb` | Công trình “tháp làm mát” người chơi xây (giảm nhiệt nước vào lò) — tháp 150 m thu về cao 22 đơn vị |
 | `Car_Model_FreeCAD.FCMacro` | `car.glb` | 80 ô tô chạy trong thành phố, mỗi xe được sơn lại một màu |
 | `Male_Mannequin_CAD.FCMacro`, `Female_Mannequin_CAD.FCMacro` | `man.glb`, `woman.glb` | Người đi bộ trong thành phố (nam/nữ xen kẽ, đổi màu áo, quay mặt theo hướng đi) |
 | `Chernobyl_Supercomplex_Expanded_LowPoly.FCMacro` | `chernobyl-supercomplex.glb` | Không còn tải trong game (thay bằng `chernobyl-complex.glb`); muốn dùng lại thì đổi một dòng `loadModel` trong `src/main.js` |
-| `Chernobyl_Power_Plant_PreAccident_LowPoly.FCMacro` | `chernobyl.glb` | Kịch bản **Lò kiểu RBMK** (đồ hoạ thấp) |
+| `Chernobyl_Power_Plant_PreAccident_LowPoly.FCMacro` | `chernobyl.glb` | Không còn tải trong game (nhà máy dùng `chernobyl-complex.glb` ở mọi mức đồ hoạ) |
 | `cloud_1.glb` (GLB gửi kèm) | `cloud.glb` | 22 đám mây trôi theo gió; giảm 57 600 → ~1 450 tam giác bằng gộp đỉnh theo lưới ô |
 | `nha_may_nhiet_dien.glb` (GLB gửi kèm) | `thermal-plant.glb` | Nhiệt điện Đồi Than (×1,3): khói than ra 2 ống khói, hơi nước ra 2 tháp làm mát; 48 khối gộp thành 13 nhóm màu |
-| `chernobyl_game_complex.glb` (GLB gửi kèm) | `chernobyl-complex.glb` | Kịch bản **Lò kiểu RBMK** (đồ hoạ cao, ×0,18): lò số 4 → đổ nát khi nổ → mái vòm che an toàn khi đang dọn dẹp, thay lõi |
+| `chernobyl_game_complex.glb` (GLB gửi kèm) | `chernobyl-complex.glb` | **Nhà máy hạt nhân Sông Lam** trong mọi ván (×0,28): khối lò thứ 4 = tổ máy 1, thứ 3 = tổ máy 2; nắp lò phát sáng theo công suất, cửa sổ sáng về đêm, đèn không lưu; đổ nát khi nổ, mái vòm che khi thay lõi |
 | `airplane.glb` (GLB gửi kèm) | `airliner.glb` | 3 máy bay chở khách bay ngang bầu trời, đèn chớp về đêm |
 
 | Script | Việc |

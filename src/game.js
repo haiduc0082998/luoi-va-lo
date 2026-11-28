@@ -5,7 +5,7 @@ import {
 import { createReactor, stepReactor } from './physics/reactor.js';
 import { rollEngineer, runEngineer } from './engineers.js';
 import { worldStep, createWorld } from './world.js';
-import { createWeather, weatherStep, current as weatherNow, windNow, windFarmMW, hConv, setWeather, airTemp } from './weather.js';
+import { createWeather, weatherStep, current as weatherNow, windNow, windFarmMW, solarFarmMW, hConv, setWeather, airTemp } from './weather.js';
 import { createResources, infraStep, count as infraCount } from './infra.js';
 import { citiesStep } from './city.js';
 import { buildable, PADS } from './map.js';
@@ -63,6 +63,10 @@ const INITIAL_LINES = [
   { a: 'port', b: 'west', kv: 220, A: 400 },
 ];
 for (const n of INITIAL_NODES.filter((x) => x.type !== 'hydro')) PADS.push([n.x, n.z, n.type === 'city' ? 14 : n.type === 'nuclear' ? 16 : n.type === 'coal' ? 20 : 9]); // nhiệt điện: mặt bằng rộng cho tấm nền mô hình
+// Khu nhà máy hạt nhân (mô hình cụm 4 khối lò, tỉ lệ NUC_SCALE, quay 180°) trải về phía đông bắc tâm lò:
+// san phẳng thêm một mặt bằng ở giữa khu để các toà nhà không chìm / lơ lửng.
+export const NUC_SCALE = 0.28;
+{ const n = INITIAL_NODES.find((x) => x.type === 'nuclear'); PADS.push([n.x + 50 * NUC_SCALE, n.z - 22 * NUC_SCALE, 95 * NUC_SCALE]); }
 
 export function createGame() {
   const nodes = INITIAL_NODES.map((n) => createNode(n));
@@ -209,6 +213,11 @@ function slowStep(G, h) {
   G.repairK = 0.4 + 0.6 * staffRatio(G); // tốc độ sửa chữa theo nhân công (dùng ở nhịp nhanh)
   const cap = { nuc: nuc.state === 'ok' ? (U.reduce((s, r) => s + r.Pe, 0) / 1e6) * crew : 0, coal: coal.state === 'ok' ? G.coalMax * capMul(coal) * crew : 0, hydro: hyd.state === 'ok' ? HYDRO_MAX * W.hydro * capMul(hyd) * crew : 0 };
   for (const n of G.net.nodes) if (n.type === 'wind' && n.state === 'ok') cap[n.id] = windFarmMW(wind) * capMul(n) * crew;
+  const sunMW = solarFarmMW(hourOfDay(G), W, G.Ta);
+  for (const n of G.net.nodes) {
+    if (n.type === 'solar' && n.state === 'ok') cap[n.id] = sunMW * capMul(n) * crew;
+    if (n.type === 'battery') n.lvK = 1 + 0.5 * (level(n) - 1); // nâng cấp: thêm 50 % công suất và dung lượng
+  }
   const exportMW = G.market.exportOn ? G.market.contractMW : 0;
   stepNetwork(G.net, h, { cap, exportMW, demandMul: demandMul(hourOfDay(G), G.Ta), Ta: G.Ta, hConv: hConv(wind), ...netParams(G) }, (t, d) => netEvent(G, t, d));
   autoReclose(G, h);

@@ -16,9 +16,14 @@ export const RELAY_DELAY = 1.5;
 export const KM_PER_UNIT = 2;        // 1 đơn vị bản đồ 3D = 2 km
 
 export const defaultImax = (A) => Math.round((A * 3.5) / 50) * 50;
-export const RATED_MVA = { sub: 800, city: 900, nuclear: 1200, coal: 800, hydro: 400, border: 700, wind: 200, mine: 150 };
+export const RATED_MVA = { sub: 800, city: 900, nuclear: 1200, coal: 800, hydro: 400, border: 700, wind: 200, mine: 150, solar: 160, battery: 260 };
 // Điều độ: gió (không kiểm soát được, nhận hết) → hạt nhân chạy nền → thủy điện rẻ → than đắt nhất
-export const GEN_ORDER = ['wind', 'nuclear', 'hydro', 'coal'];
+// Thứ tự huy động: nguồn không tốn nhiên liệu trước, pin xả trước nhiệt điện than (đắt nhất)
+export const GEN_ORDER = ['solar', 'wind', 'nuclear', 'hydro', 'battery', 'coal'];
+/** Trạm pin lưu trữ: công suất 200 MW, dung lượng 400 MWh (2 giờ), hiệu suất mỗi chiều 95 % (khứ hồi ~90 %). */
+export const BATTERY = { P: 200, E: 400, eta: 0.95 };
+/** Nguồn rẻ được dùng để sạc pin (không sạc bằng than). */
+const CHARGE_FROM = ['solar', 'wind', 'nuclear', 'hydro'];
 export const isLoad = (n) => n.type === 'city' || n.type === 'border' || n.type === 'mine';
 
 let nextId = 1;
@@ -105,7 +110,12 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
     const ok = n.state === 'ok';
     n.demand = !ok ? 0 : n.type === 'city' ? n.demandBase * env.demandMul + (n.extraMW ?? 0) : n.type === 'border' ? (env.exportMW ?? 0) : n.type === 'mine' ? n.demandBase : 0;
     n.cap = ok ? env.cap[n.id] ?? 0 : 0;
-    n.gen = n.served = n.through = n.frac = n.hz = 0;
+    if (n.type === 'battery') { // xả tối đa P, không quá năng lượng còn lại trong bước này
+      const k = n.lvK ?? 1;
+      n.E ??= BATTERY.E * k * 0.5;
+      n.cap = ok ? Math.min(BATTERY.P * k, (n.E * BATTERY.eta * 3600) / Math.max(dt, 1e-3)) : 0;
+    }
+    n.gen = n.served = n.through = n.frac = n.hz = n.charge = 0;
   }
   for (const l of net.lines) { l.R = lineResistance(l); l.P = l.I = l.loss = l.drop = 0; }
 
@@ -145,7 +155,24 @@ export function stepNetwork(net, dt, env, emit = () => {}) {
       n.island = k; n.hz = hz;
       if (isLoad(n)) { n.frac = f; n.served = n.demand * f; }
     }
+    // Pin: nếu không phải xả thì sạc bằng phần công suất rẻ còn dư (mặt trời, gió, hạt nhân, thuỷ điện)
+    for (const b of isl.nodes) {
+      if (b.type !== 'battery' || b.state !== 'ok' || b.gen > 0) continue;
+      const k = b.lvK ?? 1, room = ((BATTERY.E * k - b.E) * 3600) / Math.max(dt, 1e-3) / BATTERY.eta;
+      let want = Math.min(BATTERY.P * k, room);
+      for (const n of isl.nodes) {
+        if (want <= 0) break;
+        if (!CHARGE_FROM.includes(n.type)) continue;
+        const add = Math.min(n.cap - n.gen, want);
+        if (add > 0) { n.gen += add; b.charge += add; want -= add; }
+      }
+      b.served = b.charge; // pin đang sạc là một phụ tải
+    }
     D += demand; S += demand * f; G += isl.nodes.reduce((s, n) => s + n.gen, 0);
+    for (const b of isl.nodes) if (b.type === 'battery') { // cập nhật năng lượng trong pin (MWh)
+      b.E = Math.max(0, Math.min(BATTERY.E * (b.lvK ?? 1), b.E + ((b.charge * BATTERY.eta - b.gen / BATTERY.eta) * dt) / 3600));
+      b.soc = b.E / (BATTERY.E * (b.lvK ?? 1));
+    }
     if (demand > 0 && cap > 0) { hzSum += hz * demand; hzW += demand; }
 
     // Phân bố công suất: θ_slack = 0, B·θ = P

@@ -7,13 +7,15 @@ import { fmt } from './util.js';
 export const BUILDS = {
   sub: { name: 'Trạm biến áp', cost: 2, desc: 'Nút chia tải để nối đường dây.' },
   wind: { name: 'Trại điện gió 120 MW', cost: 6, re: 10, desc: 'Công suất theo lập phương tốc độ gió; ngắt khi gió trên 25 m/s. Tốn 10 tấn đất hiếm.' },
+  solar: { name: 'Trại điện mặt trời 100 MW', cost: 5, re: 4, desc: 'Phát theo góc mặt trời: đỉnh buổi trưa, 0 về đêm; mây làm giảm tới 75 %. Tốn 4 tấn đất hiếm.' },
+  battery: { name: 'Trạm pin lưu trữ 200 MW / 400 MWh', cost: 8, re: 12, desc: 'Sạc bằng điện rẻ còn dư (mặt trời, gió, hạt nhân), xả trước nhiệt điện than: trưa sạc, tối cao điểm xả. Giữ tần số khi mất nguồn đột ngột.' },
   tower: { name: 'Tháp làm mát phụ', cost: 4, desc: 'Hạ 3 °C nước làm mát (tối đa 3 tháp). Đặt trong bán kính 45 quanh nhà máy hạt nhân.' },
   city: { name: 'Khu đô thị mới', cost: 5, desc: '+200 MW nhu cầu, thêm doanh thu bán điện. Cần kéo dây tới.' },
   road: { name: 'Cao tốc', cost: 4, desc: 'Xe tải chở quặng: +25% sản lượng mỏ (tối đa 2 tuyến).' },
   port: { name: 'Cảng sông', cost: 7, desc: 'Xuất đất hiếm giá +30%, phí cảng 0,3 triệu USD/ngày. Phải xây sát bờ sông.' },
   airport: { name: 'Sân bay quốc tế', cost: 10, desc: 'Gacha kỹ sư −30%, nghiên cứu +15%, du lịch 0,25 triệu USD/ngày. Cần đất bằng.' },
 };
-export const GRID_TYPES = ['sub', 'wind', 'city'];
+export const GRID_TYPES = ['sub', 'wind', 'solar', 'battery', 'city'];
 export const MINE_LEVELS = [
   { name: 'Cấp 1: Mỏ lộ thiên', cost: 0, U: 1.5, RE: 0.6, desc: '1,5 tấn uranium và 0,6 tấn đất hiếm mỗi ngày.' },
   { name: 'Cấp 2: Nhà máy làm giàu uranium', cost: 6, U: 4, RE: 0.6, desc: 'Uranium 4 tấn/ngày; lò tiêu hao ít hơn 20%.' },
@@ -65,7 +67,7 @@ export function build(G, type, x, z) {
   let made;
   if (GRID_TYPES.includes(type)) {
     const k = count(G, type) + 1;
-    const name = type === 'sub' ? `Trạm ${String.fromCharCode(64 + ((G.subCount++ % 26) + 1))}` : type === 'wind' ? `Trại gió số ${k}` : `Khu đô thị mới ${k}`;
+    const name = type === 'sub' ? `Trạm ${String.fromCharCode(64 + ((G.subCount++ % 26) + 1))}` : type === 'wind' ? `Trại gió số ${k}` : type === 'solar' ? `Điện mặt trời số ${k}` : type === 'battery' ? `Trạm pin số ${k}` : `Khu đô thị mới ${k}`;
     made = createNode({ name, type, x, z, built: true, sellable: true, cost, ...(type === 'city' ? { demandBase: 200 } : {}) });
     G.net.nodes.push(made);
   } else {
@@ -76,7 +78,7 @@ export function build(G, type, x, z) {
     G.infra.push(made);
   }
   G.version++;
-  news(G, `Đã xây ${made.name} (−${fmt(cost, 1)} triệu USD${B.re ? `, −${B.re} tấn đất hiếm` : ''}).${type === 'wind' || type === 'city' ? ' Hãy kéo dây nối vào lưới.' : ''}`);
+  news(G, `Đã xây ${made.name} (−${fmt(cost, 1)} triệu USD${B.re ? `, −${B.re} tấn đất hiếm` : ''}).${['wind', 'solar', 'battery', 'city'].includes(type) ? ' Hãy kéo dây nối vào lưới.' : ''}`);
   return made;
 }
 

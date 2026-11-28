@@ -11,6 +11,8 @@ export const UPGRADES = {
   coal: { max: 4, cost: 6, what: (lv) => `Lò hơi siêu tới hạn: công suất tối đa +20% (cấp ${lv + 1}: ×${fmt(1 + 0.2 * lv, 1)})` },
   hydro: { max: 4, cost: 5, what: (lv) => `Thêm tổ máy thuỷ lực: công suất +15% (×${fmt(1 + 0.15 * lv, 2)})` },
   wind: { max: 3, cost: 2, what: (lv) => `Cánh quạt dài hơn: công suất +25% (×${fmt(1 + 0.25 * lv, 2)})` },
+  solar: { max: 3, cost: 2, what: (lv) => `Tấm pin hiệu suất cao + trục xoay theo mặt trời: công suất +20% (×${fmt(1 + 0.2 * lv, 1)})` },
+  battery: { max: 3, cost: 3, what: (lv) => `Thêm khối pin: ${fmt(200 * (1 + 0.5 * (lv - 1)))} → ${fmt(200 * (1 + 0.5 * lv))} MW, ${fmt(400 * (1 + 0.5 * lv))} MWh` },
   sub: { max: 4, cost: 2.5, what: (lv) => `Máy biến áp lớn hơn: ${fmt(800 * (1 + 0.4 * (lv - 1)))} → ${fmt(800 * (1 + 0.4 * lv))} MVA` },
   city: { max: 5, cost: 8, what: () => 'Quy hoạch mở rộng: dân số và nhu cầu điện +25%, nhà cao tầng hơn, thu thuế nhiều hơn' },
 };
@@ -25,7 +27,7 @@ export function upgradeChance(G, n) {
 }
 
 /** Hệ số công suất / định mức theo cấp. */
-const STEP = { coal: 0.2, hydro: 0.15, wind: 0.25 };
+const STEP = { coal: 0.2, hydro: 0.15, wind: 0.25, solar: 0.2 };
 export const capMul = (n) => 1 + (STEP[n.type] ?? 0) * (level(n) - 1);
 export const subRated = (n) => 800 * (1 + 0.4 * (level(n) - 1));
 

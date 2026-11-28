@@ -178,9 +178,14 @@ Mỗi lần đẩy lên nhánh `main`, GitHub Actions sẽ chạy kiểm thử, 
 - **Nhiên liệu:** hiện số ngày uranium còn đủ theo công suất lò thực tế và sản lượng mỏ. Chạy lò thấp thì tiết kiệm nhiên liệu.
 - **Mô hình mới:** mây (`cloud.glb`, giảm từ 57 600 xuống khoảng 1 450 tam giác) và máy bay chở khách (`airliner.glb`) bay ngang bầu trời.
 - **Nhiệt điện Đồi Than** dùng mô hình nhà máy nhiệt điện: khói than ra 2 ống khói theo công suất phát, hơi nước ra 2 tháp làm mát.
-- **Chernobyl trong kịch bản RBMK** (đồ hoạ cao) dùng mô hình cụm 4 lò:
-  - Lò số 4 sụp thành đống đổ nát khi nổ.
-  - Mái vòm che an toàn mới chỉ dựng lên khi người chơi bấm "Thay lõi" để dọn dẹp.
+- **Nhà máy hạt nhân Sông Lam dùng mô hình cụm 4 khối lò** (trước chỉ dùng trong kịch bản RBMK), thay cho khu lò VVER dựng tay:
+  - Khối lò thứ 4 là tổ máy 1; khối thứ 3 là tổ máy 2, hiện khi xây xong. Lúc đang xây có tường lên dần và cần cẩu quay.
+  - Nắp lò trên mái phát sáng theo công suất và nhiệt độ: xanh Cherenkov, rồi cam, rồi đỏ.
+  - Cửa sổ sáng đèn về đêm (tối đi khi nhà máy mất điện tự dùng); đèn đỏ báo không lưu nhấp nháy trên 3 ống khói.
+  - Mặt bằng được san phẳng cho cả khu.
+- Diễn biến khi có sự cố (áp dụng cho cả hai tổ máy):
+  - Khối lò sụp thành đống đổ nát khi nổ.
+  - Mái vòm che an toàn mới chỉ dựng lên (trên tổ máy 1) khi người chơi bấm "Thay lõi" để dọn dẹp.
   - Sửa xong thì lò số 4 trở lại, và vẫn là lò RBMK (trước đây lò sửa xong bị đổi thành VVER).
 
 ## Cấu trúc mã

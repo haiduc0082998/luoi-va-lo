@@ -1,21 +1,21 @@
 // Thế giới 3D: địa hình, công trình theo dữ liệu lưới (thêm/bớt động), đường dây 3 pha trên cột,
 // lò phản ứng nhìn xuyên, khói/hơi, lửa, phóng xạ, ngày/đêm, con trỏ chọn và bóng ma khi xây.
 import * as pc from 'playcanvas';
-import { clamp, ramp, WIRE_RAMP, FUEL_RAMP } from '../util.js';
-import { RATED, outletTemp, dieselRunning } from '../physics/reactor.js';
+import { clamp, ramp, WIRE_RAMP } from '../util.js';
+import { RATED, dieselRunning } from '../physics/reactor.js';
 import { lineUsable } from '../physics/network.js';
-import { hourOfDay, nodeById } from '../game.js';
+import { hourOfDay, nodeById, NUC_SCALE } from '../game.js';
 import { height, WATER_Y, buildable, riverCenter, MAP_HALF, BORDER_X, PADS } from '../map.js';
 import { buildTerrain, animateWater } from './terrain.js';
 import { createInfra } from './infra3d.js';
 import { createCityView } from './cityview.js';
 import { canPlace, BUILDS } from '../infra.js';
 import { WEATHERS } from '../weather.js';
-import { col, col255, mat, ent, meshEnt, light, setBeam, beam, fire, seeded, hyperboloid, hollowTower, lamp, model } from './kit.js';
+import { col, col255, mat, ent, light, setBeam, beam, fire, seeded, lamp, model } from './kit.js';
 
 const SEG = 6;
 export const ATTACH = { nuclear: [14, 9, 9], coal: [7, 9, 6], sub: [0, 7.4, 0], city: [0, 10, 0], hydro: [12, 11, 3], border: [-4, 7.4, 0], wind: [0, 9, 0], mine: [8, 13, 0] };
-export const PICK_RADIUS = { nuclear: 17, coal: 15, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14 };
+export const PICK_RADIUS = { nuclear: 18, coal: 15, sub: 6, city: 14, hydro: 13, border: 9, wind: 11, mine: 14 };
 const groundY = (x, z) => Math.max(height(x, z), WATER_Y);
 
 export function attachPoint(n, out = new pc.Vec3()) {
@@ -99,177 +99,101 @@ export function buildWorld(app) {
     }
   };
 
-  let hiQuality = true; // đồ hoạ cao: Chernobyl bản supercomplex; thấp: bản nhẹ
+  let hiQuality = true; // đồ hoạ cao / thấp (bóng đổ nhiều tầng)
   // ---------- Công trình theo loại ----------
   const builders = {
     nuclear(n, g) {
-      const y0 = groundY(n.x, n.z);
+      // Nhà máy hạt nhân = mô hình cụm 4 khối lò (chernobyl_game_complex.glb người chơi gửi), tỉ lệ NUC_SCALE, quay 180°
+      // để khu phụ trợ trải về phía đông bắc (tránh sông và đập thuỷ điện). Gốc mô hình = tâm khối lò thứ 4 = tổ máy 1
+      // (trùng tâm nút trên lưới); khối thứ 3 là tổ máy 2. Mô hình chỉ là vỏ: mọi trạng thái (công suất, nhiệt độ,
+      // SCRAM, nổ, sửa chữa) thể hiện qua các phần động bên dưới.
+      const S = NUC_SCALE, y0 = groundY(n.x, n.z);
       g.setLocalPosition(n.x, y0, n.z);
-      ent(g, 'cylinder', [0, 0.3, 0], [20, 0.6, 20], M.concrete);
-      ent(g, 'cylinder', [0, 5.6, 0], [18, 10, 18], M.glass, false);
-      const dome = ent(g, 'sphere', [0, 10.6, 0], [18, 11, 18], M.glass, false);
-      ent(g, 'cylinder', [0, 4.6, 0], [4.4, 8, 4.4], M.steelGlass, false);
-      const fuel = [];
-      for (const dx of [-0.8, 0, 0.8]) for (const dz of [-0.8, 0, 0.8]) fuel.push(ent(g, 'box', [dx, 3.6, dz], [0.42, 5, 0.42], M.fuel, false));
-      const rods = [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]].map(([dx, dz]) => ent(g, 'box', [dx, 8.6, dz], [0.24, 5, 0.24], M.dark, false));
-      ent(g, 'box', [0, 9.6, 0], [2.6, 1.2, 2.6], M.dark);
-      hyperboloid(app, g, [0, 1.1, 0], M.core, { height: 5.2, base: 1.65, waist: 1.65, top: 1.65, rings: 2, segs: 20, shadow: false }); // lõi rỗng phát sáng
-      const corium = ent(g, 'sphere', [0, 1.2, 0], [4, 1.1, 4], M.corium, false); corium.enabled = false;
-      const coreLight = light(g, [0, 4.5, 0], '#5cc8ff', 18);
-      ent(g, 'cylinder', [5, 4.6, 0], [2.4, 7, 2.4], M.concrete);
-      const V = (x, y, z) => new pc.Vec3(n.x + x, y0 + y, n.z + z);
-      beam(g, V(2.2, 6.6, 0), V(3.8, 6.6, 0), 0.7, M.hot);
-      beam(g, V(5, 1.1, 1.2), V(1.6, 1.1, 1.2), 0.7, M.cold);
-      ent(g, 'cylinder', [3.3, 1.3, 1.2], [1.4, 1.6, 1.4], M.dark);
-      const pump = ent(g, 'box', [3.3, 2.2, 1.2], [1.3, 0.15, 0.25], M.metal);
-      beam(g, V(5, 8.1, 0), V(13, 7, 2), 0.6, M.steam);
-      ent(g, 'box', [18, 3.5, 2], [13, 7, 9], M.concrete);
-      ent(g, 'box', [18, 7.3, 2], [13.4, 0.8, 9.4], M.roof);
-      ent(g, 'box', [14, 4, 9], [5, 8, 3], M.metal); // trạm phân phối
-      const towers = [[n.x + 18, n.z - 12], [n.x + 36, n.z - 2]].map(([x, z]) => [x, groundY(x, z), z]);
-      const towerEnts = towers.map(([x, y, z]) => hollowTower(app, world, [x, y - 0.4, z], M));
-      const [tx, ty, tz] = towers[0];
-      // Dàn tản nhiệt phụ với quạt quay theo nhiệt độ lõi
-      const fans = [-4.5, 0, 4.5].map((dx) => {
-        ent(g, 'box', [18 + dx, 1.2, 9.5], [3.4, 2.4, 2.6], M.dark);
-        ent(g, 'cylinder', [18 + dx, 2.6, 9.5], [2, 0.4, 2], M.metal);
-        return ent(g, 'box', [18 + dx, 2.9, 9.5], [1.8, 0.08, 0.3], M.lamp);
+      const site = new pc.Entity('nuc-model'); site.setLocalPosition(0, 0.03, 0); site.setLocalEulerAngles(0, 180, 0); g.addChild(site);
+      const P = (X, Y, Z) => [(50 - X) * S, Y * S, -(Z + 12) * S]; // toạ độ mô hình gốc → toạ độ trong nhà máy
+      const U2 = P(15, 0, -12); // tâm tổ máy 2 (hall2)
+      const ROOF = 14.8 * S;
+      // Hình tạm khi mô hình đang tải
+      const tmp = new pc.Entity(); site.addChild(tmp);
+      ent(tmp, 'box', [0, 2, 0], [30 * S, 14 * S, 25 * S], M.concrete);
+      ent(tmp, 'box', [35 * S, 2, 0], [30 * S, 14 * S, 25 * S], M.concrete);
+      const parts = { u1: null, u2: null, u1Win: null, u2Win: null, ruin1: [], ruin2: [], arch: null };
+      const winMat = mat('#2b3540', { emissive: '#ffcf7a', ei: 0 }); // cửa sổ: sáng đèn về đêm
+      model(site, 'chernobyl_complex', S, 0, tmp, (e) => {
+        const f = (name) => e.findByName(name);
+        Object.assign(parts, { u1: f('Unit1'), u2: f('Unit2'), u1Win: f('Unit1_Win'), u2Win: f('Unit2_Win'), arch: f('Arch'),
+          ruin1: [f('Unit1_Ruin'), f('Unit1_Rubble')], ruin2: [f('Unit2_Ruin'), f('Unit2_Rubble')] });
+        for (const name of ['Unit1_Win', 'Unit2_Win', 'Windows']) for (const mi of f(name)?.render?.meshInstances ?? []) mi.material = winMat;
       });
-      // Bồn nước làm mát, bồn cầu, hàng rào, đèn đường
-      ent(g, 'cylinder', [27, 2.5, -4], [3.6, 5, 3.6], M.tank); ent(g, 'cylinder', [27, 5.1, -4], [3.8, 0.3, 3.8], M.metal);
-      ent(g, 'sphere', [-9, 4, -9], [4.2, 4.2, 4.2], M.tank);
-      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) ent(g, 'cylinder', [-9 + dx * 1.3, 1.2, -9 + dz * 1.3], [0.3, 2.4, 0.3], M.metal);
-      const fx0 = -16, fx1 = 30, fz0 = -16, fz1 = 16;
-      for (let x = fx0; x <= fx1; x += 4) for (const z of [fz0, fz1]) ent(g, 'box', [x, 1, z], [0.18, 2, 0.18], M.fence, false);
-      for (let z = fz0; z <= fz1; z += 4) for (const x of [fx0, fx1]) ent(g, 'box', [x, 1, z], [0.18, 2, 0.18], M.fence, false);
-      for (const y of [0.8, 1.8]) {
-        for (const z of [fz0, fz1]) ent(g, 'box', [(fx0 + fx1) / 2, y, z], [fx1 - fx0, 0.08, 0.08], M.fence, false);
-        for (const x of [fx0, fx1]) ent(g, 'box', [x, y, (fz0 + fz1) / 2], [0.08, 0.08, fz1 - fz0], M.fence, false);
-      }
-      for (const [x, z] of [[fx0, fz0], [fx1, fz0], [fx1, fz1], [fx0, fz1], [7, fz1], [7, fz0]]) lamp(g, x + 0.8, 0, z + (z < 0 ? 0.8 : -0.8), M);
-      // ---------- Tổ máy số 2 (lò riêng, vật liệu riêng) + công trường ----------
-      const ux = 42, uz = 18, uy = groundY(n.x + ux, n.z + uz) - y0;
-      const u2g = new pc.Entity(); u2g.setLocalPosition(ux, uy, uz); g.addChild(u2g);
-      const M2 = { fuel: mat('#3a2418', { emissive: '#d25f23' }), ring: mat('#0b2230', { emissive: '#28beff', ei: 1.2 }),
-        core: (() => { const m = mat('#08202c', { emissive: '#28beff', ei: 1.5 }); m.cull = pc.CULLFACE_NONE; m.update(); return m; })(),
-        glass: mat('#dbe5e8', { opacity: 0.22, gloss: 0.9 }) };
-      const unit = new pc.Entity(); u2g.addChild(unit);
-      ent(unit, 'cylinder', [0, 0.3, 0], [20, 0.6, 20], M.concrete);
-      ent(unit, 'cylinder', [0, 5.6, 0], [18, 10, 18], M2.glass, false);
-      const dome2 = ent(unit, 'sphere', [0, 10.6, 0], [18, 11, 18], M2.glass, false);
-      ent(unit, 'cylinder', [0, 4.6, 0], [4.4, 8, 4.4], M.steelGlass, false);
-      const fuel2 = [];
-      for (const dx of [-0.8, 0, 0.8]) for (const dz of [-0.8, 0, 0.8]) fuel2.push(ent(unit, 'box', [dx, 3.6, dz], [0.42, 5, 0.42], M2.fuel, false));
-      const rods2 = [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]].map(([dx, dz]) => ent(unit, 'box', [dx, 8.6, dz], [0.24, 5, 0.24], M.dark, false));
-      hyperboloid(app, unit, [0, 1.1, 0], M2.core, { height: 5.2, base: 1.65, waist: 1.65, top: 1.65, rings: 2, segs: 20, shadow: false });
-      meshEnt(app, unit, new pc.TorusGeometry({ ringRadius: 9.25, tubeRadius: 0.32, segments: 40, sides: 8 }), [0, 4.2, 0], M2.ring);
-      ent(unit, 'cylinder', [5, 4.6, 0], [2.4, 7, 2.4], M.concrete);
-      const light2 = light(unit, [0, 4.5, 0], '#5cc8ff', 18);
-      const debris2 = [[3, 9, 2, 25], [-4, 8, -3, -35], [1, 12, -5, 60]].map(([dx, y, dz, r]) => {
-        const e = ent(unit, 'box', [dx, y, dz], [3, 0.5, 2], M.concrete); e.setLocalEulerAngles(r, r * 2, r / 2); e.enabled = false; return e;
-      });
-      beam(g, new pc.Vec3(n.x + ux - 6, y0 + uy + 8, n.z + uz - 4), new pc.Vec3(n.x + 24.5, y0 + 6.5, n.z + 5), 0.6, M.steam);
-      const steam2 = g.children[g.children.length - 1];
-      // Công trường: giàn giáo, cần cẩu, tường lên dần theo tiến độ
-      const site = new pc.Entity(); u2g.addChild(site);
-      const wall = ent(site, 'cylinder', [0, 0, 0], [18, 1, 18], M.concrete);
-      const V2 = (x, y, z) => new pc.Vec3(n.x + ux + x, y0 + uy + y, n.z + uz + z);
-      for (const [x, z] of [[-10, -10], [10, -10], [10, 10], [-10, 10]]) beam(site, V2(x, 0, z), V2(x, 13, z), 0.3, M.metal);
-      for (const y of [4, 8.5, 13]) { beam(site, V2(-10, y, -10), V2(10, y, -10), 0.2, M.metal); beam(site, V2(-10, y, 10), V2(10, y, 10), 0.2, M.metal); beam(site, V2(-10, y, -10), V2(-10, y, 10), 0.2, M.metal); beam(site, V2(10, y, -10), V2(10, y, 10), 0.2, M.metal); }
-      ent(site, 'box', [-14, 14, -6], [1.2, 28, 1.2], M.flag);
-      const jib = ent(site, 'box', [-6, 27.5, -6], [18, 0.8, 0.8], M.flag);
-      unit.enabled = site.enabled = false;
-      const updateU2 = (G, t) => {
-        const st = G.unit2.state, R2 = G.reactor2;
-        unit.enabled = !!R2; site.enabled = st === 'building'; steam2.enabled = !!R2;
-        if (site.enabled) { const k = Math.max(0.05, G.unit2.progress); wall.setLocalScale(18, 10 * k, 18); wall.setLocalPosition(0, 5 * k, 0); jib.setLocalEulerAngles(0, t * 12, 0); }
-        if (!R2) return;
-        rods2.forEach((r) => { const p = r.getLocalPosition(); r.setLocalPosition(p.x, 3.6 + (R2.rod / 100) * 5, p.z); });
-        col255(ramp(FUEL_RAMP, R2.T), M2.fuel.emissive); M2.fuel.emissiveIntensity = clamp((R2.T - 250) / 500, 0.15, 3); M2.fuel.update();
-        fuel2.forEach((f) => (f.enabled = !R2.melt));
-        const hk = clamp((R2.T - 380) / 400, 0, 1);
-        col255(hk > 0 ? [255, Math.round(150 - 120 * hk), 30] : [40, 190, 255], M2.ring.emissive);
-        M2.ring.emissiveIntensity = R2.melt ? 3 : 0.4 + clamp((R2.Pf / RATED) * 1.2, 0, 2.5) + hk * 2; M2.ring.update();
-        M2.core.emissive = M2.ring.emissive; M2.core.emissiveIntensity = R2.melt ? 0.2 : 0.6 + clamp((R2.Pf / RATED) * 1.5, 0, 3) + hk * 2; M2.core.update();
-        light2.light.intensity = R2.melt ? 3 : clamp((R2.Pf / RATED) * 2.5, 0, 6);
-        dome2.enabled = !R2.boom; debris2.forEach((d) => (d.enabled = R2.boom));
-        M2.glass.diffuse = R2.boom ? col('#ff8a75') : col('#dbe5e8'); M2.glass.update();
-      };
-      // Bệ phòng không (hiện khi có quân canh gác nhà máy)
-      const sam = new pc.Entity(); sam.setLocalPosition(-12, 0, -14); g.addChild(sam);
-      ent(sam, 'box', [0, 0.8, 0], [4, 1.6, 2.6], M.army);
-      const tube = ent(sam, 'box', [0, 2.6, 0], [1.2, 1.2, 4.6], M.army); tube.setLocalEulerAngles(-35, 0, 0);
-      let fanRot = 0;
-      // Vòng phát sáng Cherenkov quanh vỏ lò: xanh khi ổn định, cam rồi đỏ khi quá nhiệt
-      meshEnt(app, g, new pc.TorusGeometry({ ringRadius: 9.25, tubeRadius: 0.32, segments: 40, sides: 8 }), [0, 4.2, 0], M.ring);
-      ent(g, 'box', [-14, 1.5, 10], [4, 3, 3], M.concrete);
-      ent(g, 'sphere', [-14, 3.4, 10], [0.9, 0.9, 0.9], M.lamp, false);
+      // Nắp lò phát sáng trên mái mỗi tổ máy: màu & độ sáng theo công suất và nhiệt độ lõi (xanh Cherenkov → cam → đỏ)
+      const lid1 = ent(g, 'cylinder', [0, ROOF + 0.06, 0], [3.2, 0.1, 3.2], M.ring, false);
+      const ring2 = mat('#0b2230', { emissive: '#28beff', ei: 1.2 });
+      const lid2 = ent(g, 'cylinder', [U2[0], ROOF + 0.06, U2[2]], [3.2, 0.1, 3.2], ring2, false);
+      const coreLight = light(g, [0, ROOF + 1.2, 0], '#5cc8ff', 7); // ánh sáng hắt nhẹ quanh mái, không phủ cả khu
+      const light2 = light(g, [U2[0], ROOF + 1.2, U2[2]], '#5cc8ff', 7);
+      const corium = ent(g, 'sphere', [0, 0.6, 0], [4, 1.1, 4], M.corium, false); corium.enabled = false;
+      // Đèn đỏ báo không lưu trên 3 ống khói thông gió (cao 30 → 8,4 đơn vị), nhấp nháy
+      const beacon = mat('#400000', { emissive: '#ff2a1a', ei: 0 });
+      for (const X of [5, -33, -68]) { const [x, y, z] = P(X, 30, -25); ent(g, 'sphere', [x, y + 0.25, z], [0.5, 0.5, 0.5], beacon, false); }
+      // Công trường tổ máy 2: tường lên dần theo tiến độ, cần cẩu quay
+      const build2 = new pc.Entity(); build2.setLocalPosition(U2[0], 0, U2[2]); g.addChild(build2);
+      const wall = ent(build2, 'box', [0, 0, 0], [30 * S, 1, 25 * S], M.concrete);
+      ent(build2, 'box', [-5, 6, -5], [0.5, 12, 0.5], M.flag);
+      const jib = new pc.Entity(); jib.setLocalPosition(-5, 12, -5); build2.addChild(jib);
+      ent(jib, 'box', [3.5, 0, 0], [10, 0.4, 0.4], M.flag);
+      build2.enabled = false;
+      // Mảnh vỡ văng lên khi nổ, ánh chớp, đám cháy than chì / nhiên liệu trong gian lò
       const debris = [[3, 9, 2, 25], [-4, 8, -3, -35], [1, 12, -5, 60], [-6, 10, 4, -15]].map(([dx, y, dz, r]) => {
         const e = ent(g, 'box', [dx, y, dz], [3, 0.5, 2], M.concrete); e.setLocalEulerAngles(r, r * 2, r / 2); e.enabled = false; return e;
       });
       const plume = ent(world, 'sphere', [0, -50, 0], [1, 1, 1], M.plume, false); plume.enabled = false;
       const flash = light(g, [0, 16, 0], '#ffffff', 160);
-      const blaze = fire(g, [0, 9, 0], 2, M);
-      // ---------- Chế độ RBMK: thay cụm VVER bằng nhà máy Chernobyl (2 macro FreeCAD) ----------
-      // Gốc mô hình = tâm khối lò số 4, trùng tâm lõi; quay 180° để khu phụ trợ trải về phía nam, tránh đập thủy điện.
-      const keep = new Set([coreLight, flash, blaze.g, sam, corium, ...debris]);
-      const vver = g.children.filter((c) => !keep.has(c));
-      const CH = 0.08; // bản nhẹ (macro FreeCAD, mét): khu 480 × 340 m chiếm 38 × 27 đơn vị
-      const CX = 0.18; // bản cao (chernobyl_game_complex.glb): 180 × 130 → 32 × 23 đơn vị
-      // Tỉ lệ & hướng chọn bằng cách dò địa hình: không lấn sông, nền phẳng, không đè lên trạm/đập/mỏ khác
-      const rb = new pc.Entity('rbmk'); rb.setLocalPosition(0, 0.05, 0); rb.setLocalEulerAngles(0, 180, 0); g.addChild(rb);
-      const hiQ = new pc.Entity(), loQ = new pc.Entity(); rb.addChild(hiQ); rb.addChild(loQ);
-      const r4 = [], ruins = [], arches = [];
-      const grab = (e) => {
-        r4.push(e.findByName('Reactor4'));
-        ruins.push(e.findByName('Reactor4_Ruin'), e.findByName('Reactor4_Rubble'));
-        arches.push(e.findByName('Arch')); // mái vòm che an toàn mới: chỉ hiện khi đang dọn dẹp sau vụ nổ
+      const blaze = fire(g, [0, 1.6, 0], 2, M);
+      // Trạm diesel dự phòng + đèn trạng thái nguồn tự dùng (xanh: diesel chạy, vàng: mất lưới, đỏ: hỏng diesel)
+      ent(g, 'box', [-14, 1.5, 6], [4, 3, 3], M.concrete);
+      ent(g, 'sphere', [-14, 3.4, 6], [0.9, 0.9, 0.9], M.lamp, false);
+      // Bệ phòng không (hiện khi có quân canh gác nhà máy)
+      const sam = new pc.Entity(); sam.setLocalPosition(-12, 0, -10); g.addChild(sam);
+      ent(sam, 'box', [0, 0.8, 0], [4, 1.6, 2.6], M.army);
+      const tube = ent(sam, 'box', [0, 2.6, 0], [1.2, 1.2, 4.6], M.army); tube.setLocalEulerAngles(-35, 0, 0);
+      for (const [x, z] of [[-11, -16], [-11, 10], [38, -16], [38, 10]]) lamp(g, x, 0, z, M);
+
+      const glow = (R, m, Lt) => { // màu nắp lò + đèn lõi theo trạng thái một tổ máy
+        const hotK = clamp((R.T - 380) / 400, 0, 1);
+        col255(R.melt ? [255, 110, 30] : hotK > 0 ? [255, Math.round(150 - 120 * hotK), 30] : [40, 190, 255], m.emissive);
+        m.emissiveIntensity = R.melt ? 3 : 0.3 + clamp((R.Pf / RATED) * 1.6, 0, 3) + hotK * 2; m.update();
+        Lt.light.color = R.melt ? col('#ff8a2a') : col('#5cc8ff');
+        Lt.light.intensity = R.melt ? 2 : clamp((R.Pf / RATED) * 1.2, 0, 1.6);
       };
-      model(hiQ, 'chernobyl_complex', CX, 0, null, grab);
-      model(loQ, 'chernobyl', CH, 0, null, grab);
-      // Tấm che lò trên mái gian lò (vị trí lõi), phát sáng theo màu/độ nóng của vòng Cherenkov
-      const lid = ent(g, 'cylinder', [0, 1.65, 0], [1.6, 0.06, 1.6], M.ring, false);
-      const rbTowers = [[120, 22], [155, 22]].map(([X, Y]) => { // tháp làm mát của mô hình (cao 38 m)
-        const x = n.x - (X - 28) * CH, z = n.z + (Y - 73) * CH; return [x, y0, z];
-      });
-      rb.enabled = lid.enabled = false;
-      let wasRbmk = false;
-      let pumpRot = 0, acc = 0;
-      return (G, dt, t) => {
-        const R = G.reactor, rbmk = !!R.rbmk;
-        if (rbmk !== wasRbmk) {
-          wasRbmk = rbmk;
-          for (const c of vver) c.enabled = !rbmk;
-          for (const e of towerEnts) e.enabled = !rbmk;
-          rb.enabled = rbmk;
-          blaze.g.setLocalPosition(0, rbmk ? 1.2 : 9, 0); // RBMK không có vỏ bọc: cháy than chì ngay trong gian lò
-        }
-        if (rbmk) {
-          hiQ.enabled = hiQuality; loQ.enabled = !hiQuality;
-          const wrecked = R.boom || G.repair?.[1]?.kind === 'core';
-          r4.forEach((e) => e && (e.enabled = !wrecked)); ruins.forEach((e) => e && (e.enabled = wrecked));
-          arches.forEach((e) => e && (e.enabled = G.repair?.[1]?.kind === 'core'));
-          lid.enabled = !G.repair?.[1]; lid.setLocalPosition(0, R.boom ? 0.4 : hiQuality ? 2.6 : 1.65, 0); // sau nổ: lõi hở giữa đống đổ nát
-        } else lid.enabled = false;
-        updateU2(G, t); if (rbmk) steam2.enabled = false; sam.enabled = G.world.guards.includes(n.id);
-        rods.forEach((r) => { const p = r.getLocalPosition(); r.setLocalPosition(p.x, 3.6 + (R.rod / 100) * 5, p.z); });
-        col255(ramp(FUEL_RAMP, R.T), M.fuel.emissive); M.fuel.emissiveIntensity = clamp((R.T - 250) / 500, 0.15, 3); M.fuel.update();
-        fuel.forEach((f) => (f.enabled = !R.melt && !rbmk)); corium.enabled = R.melt;
-        coreLight.light.color = R.melt ? col('#ff8a2a') : col('#5cc8ff');
-        coreLight.light.intensity = R.melt ? 3 : clamp((R.Pf / RATED) * 2.5, 0, 6);
-        col255(ramp(WIRE_RAMP, 30 + (outletTemp(R) - 290) * 3), M.hot.emissive);
-        M.hot.emissiveIntensity = R.flow > 0.02 ? 0.8 : 0; M.hot.update();
-        M.cold.emissiveIntensity = R.flow > 0.02 ? 0.4 : 0; M.cold.update();
-        pumpRot += R.flow * 720 * dt; pump.setLocalEulerAngles(0, pumpRot % 360, 0);
-        fanRot += (200 + clamp(R.T - 280, 0, 400) * 3) * dt; fans.forEach((f, i) => f.setLocalEulerAngles(0, (fanRot + i * 40) % 360, 0));
-        M.steam.emissive = col('#f2b13a'); M.steam.emissiveIntensity = R.Pe > 0 ? 0.6 : 0; M.steam.update();
+      let blink = 0;
+      return (G, dt, t, day) => {
+        const R = G.reactor, R2 = G.reactor2, rep1 = G.repair?.[1], rep2 = G.repair?.[2];
+        const wreck1 = R.boom || rep1?.kind === 'core', wreck2 = !!R2?.boom || rep2?.kind === 'core';
+        sam.enabled = G.world.guards.includes(n.id);
+        // Khối lò: nguyên vẹn / đổ nát; mái vòm che an toàn dựng lên khi đang dọn dẹp, thay lõi tổ máy 1
+        if (parts.u1) parts.u1.enabled = parts.u1Win.enabled = !wreck1;
+        parts.ruin1.forEach((e) => e && (e.enabled = wreck1));
+        if (parts.arch) parts.arch.enabled = rep1?.kind === 'core';
+        const st2 = G.unit2?.state, has2 = !!R2 || rep2;
+        if (parts.u2) parts.u2.enabled = parts.u2Win.enabled = has2 && !wreck2;
+        parts.ruin2.forEach((e) => e && (e.enabled = !!wreck2));
+        build2.enabled = st2 === 'building';
+        if (build2.enabled) { const k = Math.max(0.05, G.unit2.progress), h = 14 * S * k; wall.setLocalScale(30 * S, h, 25 * S); wall.setLocalPosition(0, h / 2, 0); jib.setLocalEulerAngles(0, t * 12, 0); }
+        // Nắp lò & đèn lõi
+        lid1.enabled = !rep1; lid1.setLocalPosition(0, R.boom ? 0.5 : ROOF + 0.06, 0);
+        glow(R, M.ring, coreLight); corium.enabled = R.melt;
+        lid2.enabled = !!R2 && !rep2; light2.enabled = !!R2;
+        if (R2) { lid2.setLocalPosition(U2[0], R2.boom ? 0.5 : ROOF + 0.06, U2[2]); glow(R2, ring2, light2); }
+        // Cửa sổ sáng về đêm (khi nhà máy còn điện tự dùng), đèn không lưu nhấp nháy
+        winMat.emissiveIntensity = (1 - day) * (R.offsite || R.Pe > 0 ? 1.4 : 0.2); winMat.update();
+        blink += dt; beacon.emissiveIntensity = blink % 1.4 < 0.5 ? 3 : 0; beacon.update();
         M.lamp.emissive = col(!R.diesel ? '#ff5434' : dieselRunning(R) ? '#36b2ff' : !R.offsite ? '#f2b13a' : '#202020');
         M.lamp.emissiveIntensity = 2; M.lamp.update();
-        dome.enabled = !R.boom && !rbmk; debris.forEach((d) => (d.enabled = R.boom));
-        M.glass.diffuse = R.boom ? col('#ff8a75') : col('#dbe5e8'); M.glass.update();
+        // Nổ: mảnh vỡ, chớp sáng, cháy; chùm phóng xạ theo hướng gió
+        debris.forEach((d) => (d.enabled = R.boom));
         blaze.set(R.boom && R.T > 600, t);
         R.flash = Math.max(0, R.flash - dt * 0.8); flash.light.intensity = R.flash * 10;
-        const rel = Math.max(R.release, G.reactor2?.release ?? 0), pl = Math.max(R.plume, G.reactor2?.plume ?? 0);
+        const rel = Math.max(R.release, R2?.release ?? 0), pl = Math.max(R.plume, R2?.plume ?? 0);
         plume.enabled = rel > 0;
         if (plume.enabled) {
           const len = 10 + pl * 90, w = (R.wind * Math.PI) / 180;
@@ -277,13 +201,7 @@ export function buildWorld(app) {
           plume.setLocalEulerAngles(0, -R.wind, 0);
           plume.setLocalScale(10 + pl * 30, 5 + pl * 5, len * 2);
         }
-        const hotK = clamp((R.T - 380) / 400, 0, 1);
-        col255(hotK > 0 ? [255, Math.round(150 - 120 * hotK), 30] : [40, 190, 255], M.ring.emissive);
-        M.ring.emissiveIntensity = R.melt ? 3 : 0.4 + clamp((R.Pf / RATED) * 1.2, 0, 2.5) + hotK * 2;
-        M.ring.update();
-        M.core.emissive = M.ring.emissive; M.core.emissiveIntensity = R.melt ? 0.2 : 0.6 + clamp((R.Pf / RATED) * 1.5, 0, 3) + hotK * 2; M.core.update();
-        acc += dt * 5 * clamp((R.Pe + (G.reactor2?.Pe ?? 0)) / (0.33 * RATED), 0, 2);
-        while (acc >= 1) { acc -= 1; const [x, y, z] = (rbmk ? rbTowers : towers)[Math.random() < 0.5 ? 0 : 1]; if (!rbmk || !hiQuality) emit(x, y + (rbmk ? 3.2 : 20), z, '#f3f5f4', rbmk ? 2.5 : 5, rbmk ? 4 : 9); }
+        M.core.emissive = M.ring.emissive; M.core.emissiveIntensity = M.ring.emissiveIntensity; M.core.update();
       };
     },
 
@@ -551,7 +469,7 @@ export function buildWorld(app) {
   // ---------- Đồng bộ với dữ liệu lưới ----------
   const nodeViews = new Map(), lineViews = new Map();
   // Bán kính bao của từng loại công trình (để kiểm tra có nằm trong khung nhìn không)
-  const VIEW_R = { nuclear: 48, city: 34, coal: 30, hydro: 34, sub: 14, border: 18, wind: 22, mine: 26 };
+  const VIEW_R = { nuclear: 60, city: 34, coal: 30, hydro: 34, sub: 14, border: 18, wind: 22, mine: 26 };
   const cull = { shown: 0, hidden: 0 }, sph = new pc.BoundingSphere();
   const inView = (fr, x, y, z, r) => { sph.center.set(x, y, z); sph.radius = r; return fr.containsSphere(sph) > 0; };
   // Lều lính gác + xe quân sự cạnh công trình được canh gác
@@ -689,7 +607,8 @@ export function buildWorld(app) {
     // hoạt cảnh). Logic game vẫn chạy đủ trong advance(); khi quay lại vùng đó, hàm update vẽ lại đúng trạng thái hiện tại.
     const fr = camera.camera.frustum;
     for (const v of nodeViews.values()) {
-      const on = inView(fr, v.node.x, groundY(v.node.x, v.node.z) + 8, v.node.z, VIEW_R[v.node.type] ?? 18);
+      const off = v.node.type === 'nuclear' ? 14 : 0; // khu nhà máy hạt nhân lệch về phía đông bắc tâm lò
+      const on = inView(fr, v.node.x + off, groundY(v.node.x, v.node.z) + 8, v.node.z - off * 0.4, VIEW_R[v.node.type] ?? 18);
       if (v.g.enabled !== on) v.g.enabled = on;
       if (v.guard) v.guard.enabled = on && G.world.guards.includes(v.node.id);
       if (on) { v.update(G, dt, time, day); cull.shown++; } else cull.hidden++;

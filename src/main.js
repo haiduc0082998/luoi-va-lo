@@ -137,7 +137,6 @@ loadModel(app, 'cooling_tower', 'models/cooling-tower.glb');
 loadModel(app, 'car', 'models/car.glb');
 loadModel(app, 'man', 'models/man.glb');
 loadModel(app, 'woman', 'models/woman.glb');
-loadModel(app, 'chernobyl', 'models/chernobyl.glb');
 loadModel(app, 'chernobyl_complex', 'models/chernobyl-complex.glb'); // thay bản supercomplex (file vẫn còn trong models/)
 loadModel(app, 'thermal', 'models/thermal-plant.glb');
 loadModel(app, 'cloud', 'models/cloud.glb');
